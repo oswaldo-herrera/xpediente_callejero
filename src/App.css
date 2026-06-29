@@ -1,0 +1,23 @@
+.coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  background-color: #0d0d0d;
+  color: #ffffff;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.coming-soon h1 {
+  font-size: 3rem;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+.coming-soon p {
+  font-size: 1.5rem;
+  margin: 0;
+  color: #cccccc;
+}
