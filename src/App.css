@@ -126,6 +126,19 @@ body {
 .masthead-eyebrow span:nth-child(2) { text-align: center; }
 .masthead-eyebrow span:last-child   { text-align: right; }
 
+@media (max-width: 640px) {
+  .masthead-eyebrow {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0 10px;
+  }
+  .masthead-eyebrow span:nth-child(2) { display: none; }
+  .masthead-eyebrow span:last-child   { text-align: right; }
+  .eyebrow-full { display: none; }
+}
+
 .masthead-title {
   display: flex;
   justify-content: center;
@@ -248,6 +261,42 @@ body {
   height: 2px;
   background: var(--red);
 }
+
+.theme-wrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-left: 16px;
+}
+
+.theme-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.theme-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: none;
+  border: 1px solid var(--rule-dk);
+  color: var(--ink-mid);
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  align-self: center;
+  transition: border-color 0.2s, color 0.2s;
+}
+.theme-btn:hover        { border-color: var(--ink); color: var(--ink); }
+.theme-btn:focus-visible{ outline: 2px solid var(--red); outline-offset: 2px; }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
 .hero {

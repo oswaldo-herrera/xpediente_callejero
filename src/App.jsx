@@ -1,5 +1,5 @@
 import { motion, useInView } from 'framer-motion'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import './App.css'
 
 // ─── Content ──────────────────────────────────────────────────────────────────
@@ -108,9 +108,9 @@ function Masthead() {
   return (
     <header className="masthead">
       <div className="masthead-eyebrow">
-        <span>CDMX · Est. 2026</span>
+        <span>Edo. Mex · Est. 2026</span>
         <span>Periodismo de Investigación y Participación Ciudadana</span>
-        <span>Dom. 19 Jul. 2026 · No. 001</span>
+        <span><span className="eyebrow-full">Dom. 19 Jul. 2026 · </span>No. 001</span>
       </div>
       <Rule thick />
       <div className="masthead-title" aria-label={TITLE}>
@@ -164,6 +164,33 @@ function Ticker() {
   )
 }
 
+// ─── Theme toggle ─────────────────────────────────────────────────────────────
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const stored = localStorage.getItem('xc-theme')
+    if (stored) return stored === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(() => {
+    const theme = dark ? 'dark' : 'light'
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('xc-theme', theme)
+  }, [dark])
+
+  return (
+    <button
+      className="theme-btn"
+      onClick={() => setDark(d => !d)}
+      aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+    >
+      {dark ? '○ Claro' : '● Oscuro'}
+    </button>
+  )
+}
+
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 
 function Nav() {
@@ -189,6 +216,10 @@ function Nav() {
           )}
         </button>
       ))}
+      <div className="theme-wrap">
+        <span className="theme-label">👆 Estilo visual</span>
+        <ThemeToggle />
+      </div>
     </motion.nav>
   )
 }
