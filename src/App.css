@@ -262,13 +262,37 @@ body {
   background: var(--red);
 }
 
+/* ── Theme toggle ─────────────────────────────────────────────────────────── */
+
 .theme-wrap {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+/* En nav (escritorio): al extremo derecho */
+.theme-wrap--nav {
+  margin-left: auto;
   padding-left: 16px;
+}
+
+/* En eyebrow (móvil): oculto por defecto en escritorio */
+.eyebrow-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  text-align: right;
+}
+.theme-wrap--eyebrow { display: none; }
+
+@media (max-width: 640px) {
+  /* Mostrar toggle en eyebrow, ocultar "No. 001" */
+  .theme-wrap--eyebrow { display: flex; }
+  .eyebrow-no          { display: none; }
+  /* Ocultar toggle en nav */
+  .theme-wrap--nav     { display: none; }
 }
 
 .theme-label {
@@ -292,7 +316,6 @@ body {
   padding: 5px 12px;
   cursor: pointer;
   white-space: nowrap;
-  align-self: center;
   transition: border-color 0.2s, color 0.2s;
 }
 .theme-btn:hover        { border-color: var(--ink); color: var(--ink); }

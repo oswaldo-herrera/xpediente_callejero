@@ -104,13 +104,16 @@ function ImgPlaceholder({ variant = 'hero', className = '' }) {
 
 const TITLE = 'Xpediente Callejero'
 
-function Masthead() {
+function Masthead({ dark, onToggle }) {
   return (
     <header className="masthead">
       <div className="masthead-eyebrow">
-        <span>Edo. Mex · Est. 2026</span>
+        <span>Edo Mex · 2026</span>
         <span>Periodismo de Investigación y Participación Ciudadana</span>
-        <span><span className="eyebrow-full">Dom. 19 Jul. 2026 · </span>No. 001</span>
+        <div className="eyebrow-right">
+          <span className="eyebrow-no"><span className="eyebrow-full">Dom. 19 Jul. 2026 · </span>No. 001</span>
+          <ThemeBtn dark={dark} onToggle={onToggle} className="theme-wrap--eyebrow" />
+        </div>
       </div>
       <Rule thick />
       <div className="masthead-title" aria-label={TITLE}>
@@ -164,36 +167,26 @@ function Ticker() {
   )
 }
 
-// ─── Theme toggle ─────────────────────────────────────────────────────────────
+// ─── Theme button (presentational) ───────────────────────────────────────────
 
-function ThemeToggle() {
-  const [dark, setDark] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const stored = localStorage.getItem('xc-theme')
-    if (stored) return stored === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(() => {
-    const theme = dark ? 'dark' : 'light'
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('xc-theme', theme)
-  }, [dark])
-
+function ThemeBtn({ dark, onToggle, className = '' }) {
   return (
-    <button
-      className="theme-btn"
-      onClick={() => setDark(d => !d)}
-      aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-    >
-      {dark ? '○ Claro' : '● Oscuro'}
-    </button>
+    <div className={`theme-wrap ${className}`}>
+      <span className="theme-label">👆 Estilo visual</span>
+      <button
+        className="theme-btn"
+        onClick={onToggle}
+        aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+      >
+        {dark ? '○ Claro' : '● Oscuro'}
+      </button>
+    </div>
   )
 }
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 
-function Nav() {
+function Nav({ dark, onToggle }) {
   const [active, setActive] = useState('Nacional')
   return (
     <motion.nav
@@ -216,10 +209,7 @@ function Nav() {
           )}
         </button>
       ))}
-      <div className="theme-wrap">
-        <span className="theme-label">👆 Estilo visual</span>
-        <ThemeToggle />
-      </div>
+      <ThemeBtn dark={dark} onToggle={onToggle} className="theme-wrap--nav" />
     </motion.nav>
   )
 }
@@ -425,11 +415,26 @@ function Footer() {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [dark, setDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const stored = localStorage.getItem('xc-theme')
+    if (stored) return stored === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(() => {
+    const theme = dark ? 'dark' : 'light'
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('xc-theme', theme)
+  }, [dark])
+
+  const toggleDark = () => setDark(d => !d)
+
   return (
     <div className="newspaper">
-      <Masthead />
+      <Masthead dark={dark} onToggle={toggleDark} />
       <Ticker />
-      <Nav />
+      <Nav dark={dark} onToggle={toggleDark} />
       <main>
         <Hero />
         <div className="divider" />
