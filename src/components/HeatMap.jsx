@@ -14,39 +14,45 @@ const STATE_LABELS = [
   { name: 'Tlaxcala', lon: -98.5, lat: 19.58 },
 ]
 
-// Pseudo-aleatorio estable para variar la intensidad por categoría
-const rand = (i, seed) => {
-  const s = Math.sin((i + 1) * 12.9898 * seed) * 43758.5453
-  return s - Math.floor(s)
-}
+const ZOOMS = [1, 1.5, 2]
+const ZOOM_ZM = ZOOMS.length - 1 // Arranca enfocado en la zona metropolitana
+const FOCUS = project(-99.15, 19.49)
 
-const ZOOMS = [1, 1.6, 2.4]
-const FOCUS = project(-99.15, 19.5) // Valle de México
+// Columnas de etiquetas a cada lado de la zona metropolitana
+const LABEL_X = { izq: 548, der: 770 }
+const LABEL_GAP = 14
 
-export default function HeatMap() {
+const MES_MS = 30 * 24 * 60 * 60 * 1000
+const MAX_MIN = 5 // Con pocas notas el mapa no arranca al máximo de intensidad
+
+export default function HeatMap({ notas }) {
   const [filter, setFilter] = useState('todas')
-  const [zoom, setZoom] = useState(0)
+  const [zoom, setZoom] = useState(ZOOM_ZM)
   const [hover, setHover] = useState(null)
 
   const points = useMemo(() => {
     const f = MAP_FILTERS.find(x => x.id === filter)
-    return MUNICIPIOS.map((m, i) => {
-      const w = f?.seed ? 0.35 + rand(i, f.seed) * 0.9 : 1
-      const value = Math.round(m.total * w)
+    const visibles = notas.filter(n => !f?.categoria || n.expedientes?.categoria === f.categoria)
+    const desde = Date.now() - MES_MS
+    return MUNICIPIOS.map(m => {
+      const propias = visibles.filter(n => n.municipio === m.name)
       const [x, y] = project(m.lon, m.lat)
-      return { ...m, value, x, y }
+      return {
+        ...m,
+        value: propias.length,
+        mes: propias.filter(n => new Date(n.published_at) >= desde).length,
+        x,
+        y,
+      }
     })
-  }, [filter])
+  }, [filter, notas])
 
-  const max = Math.max(...points.map(p => p.value))
-  // Etiquetas para los puntos más intensos, evitando encimarse
-  const labeled = new Set()
-  const placed = []
-  for (const p of [...points].sort((a, b) => b.value - a.value)) {
-    if (placed.length >= 7) break
-    if (placed.some(q => Math.abs(q.x - p.x) < 120 && Math.abs(q.y - p.y) < 30)) continue
-    placed.push(p)
-    labeled.add(p.name)
+  const max = Math.max(MAX_MIN, ...points.map(p => p.value))
+  // Cada columna se reparte parejo, en el orden vertical de sus puntos
+  const labelY = {}
+  for (const lado of ['izq', 'der']) {
+    const col = points.filter(p => p.lado === lado).sort((a, b) => a.y - b.y)
+    col.forEach((p, i) => { labelY[p.name] = FOCUS[1] + (i - (col.length - 1) / 2) * LABEL_GAP })
   }
 
   const z = ZOOMS[zoom]
@@ -67,7 +73,7 @@ export default function HeatMap() {
           animate={{ viewBox: `${vx} ${vy} ${vw} ${vh}` }}
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           role="img"
-          aria-label="Mapa de calor de expedientes en el Estado de México"
+          aria-label="Mapa de calor de notas en la zona metropolitana"
         >
           <defs>
             <radialGradient id="heat">
@@ -119,7 +125,7 @@ export default function HeatMap() {
                 cy={p.y}
                 fill="url(#heat)"
                 initial={false}
-                animate={{ r: 22 + Math.sqrt(p.value / max) * 78 }}
+                animate={{ r: p.value ? (22 + Math.sqrt(p.value / max) * 78) / z : 0 }}
                 transition={{ duration: 0.6 }}
               />
             ))}
@@ -132,12 +138,25 @@ export default function HeatMap() {
               onPointerEnter={() => setHover(p)}
               onPointerLeave={() => setHover(null)}
             >
-              <circle cx={p.x} cy={p.y} r="16" fill="transparent" />
-              <circle cx={p.x} cy={p.y} r={hover?.name === p.name ? 6 : 3.5} className="map-dot" />
+              <circle cx={p.x} cy={p.y} r="9" fill="transparent" />
+              <circle cx={p.x} cy={p.y} r={hover?.name === p.name ? 6 : 3.5} className={`map-dot${p.value ? '' : ' map-dot--off'}`} />
               {p.value / max > 0.55 && <circle cx={p.x} cy={p.y} r="6" className="map-pulse" />}
-              {labeled.has(p.name) && (
-                <text x={p.x + 9} y={p.y - 8} className="map-label">{p.name}</text>
-              )}
+              {zoom === ZOOM_ZM && (p.lado === 'cerca' ? (
+                <text x={p.x + 8} y={p.y} dy=".35em" className="map-callout">{p.name}</text>
+              ) : (
+                <>
+                  <line x1={p.x} y1={p.y} x2={LABEL_X[p.lado] + (p.lado === 'izq' ? 2 : -2)} y2={labelY[p.name]} className="map-leader" />
+                  <text
+                    x={LABEL_X[p.lado]}
+                    y={labelY[p.name]}
+                    dy=".35em"
+                    textAnchor={p.lado === 'izq' ? 'end' : 'start'}
+                    className="map-callout"
+                  >
+                    {p.name}
+                  </text>
+                </>
+              ))}
             </g>
           ))}
         </motion.svg>
@@ -157,22 +176,22 @@ export default function HeatMap() {
               exit={{ opacity: 0 }}
             >
               <strong>{hover.name}</strong>
-              <span>{hover.value} expedientes</span>
-              <span className="map-tip-sub">+{hover.mes} este mes</span>
+              <span>{hover.value} {hover.value === 1 ? 'nota' : 'notas'}</span>
+              <span className="map-tip-sub">{hover.mes} en los últimos 30 días</span>
             </motion.div>
           )}
         </AnimatePresence>
 
         <div className="map-legend">
-          <span>Baja</span>
+          <span>Menos notas</span>
           <span className="map-legend-bar" />
-          <span>Crítica</span>
+          <span>Más notas</span>
         </div>
 
         <div className="map-zoom">
           <button className="map-zbtn" onClick={() => setZoom(v => Math.min(v + 1, ZOOMS.length - 1))} aria-label="Acercar">+</button>
           <button className="map-zbtn" onClick={() => setZoom(v => Math.max(v - 1, 0))} aria-label="Alejar">−</button>
-          <button className="map-zbtn" onClick={() => setZoom(0)} aria-label="Centrar mapa"><Icon name="gps" size={15} /></button>
+          <button className="map-zbtn" onClick={() => setZoom(ZOOM_ZM)} aria-label="Centrar mapa"><Icon name="gps" size={15} /></button>
         </div>
       </div>
     </div>

@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import {
-  SECCIONES, TICKER, KPIS, MUNICIPIOS, INCIDENTES, TENDENCIA, ESTATUS,
-  ALERTAS, PERSONAJES, MUNICIPIOS_DENUNCIA, WHATSAPP_NUMBER, TEASER_VIDEO, TEASER_CLOSABLE,
+  SECCIONES, TICKER, KPIS, MUNICIPIOS, INCIDENTES, ESTATUS,
+  PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, estadoLabel, youtubeId, WHATSAPP_NUMBER, TEASER_VIDEO, TEASER_CLOSABLE,
 } from './data'
 import { Btn, Icon, Panel, PanelHead, Tabs, Counter, StatusBadge } from './components/ui'
 import { RankBars, Donut, TrendLine } from './components/Charts'
@@ -14,12 +14,12 @@ import TeaserIntro from './components/TeaserIntro'
 
 const NAV = [
   { id: 'inicio', label: 'Inicio', icon: 'home' },
+  { id: 'nosotros', label: 'Nosotros', icon: 'users' },
   { id: 'expedientes', label: 'Secciones', icon: 'folder' },
   { id: 'mapa', label: 'Mapa de calor', icon: 'map' },
   { id: 'datos', label: 'Datos', icon: 'chart' },
   { id: 'evidencia', label: 'Evidencia aérea', icon: 'drone' },
-  { id: 'denuncia', label: 'Denuncia Ciudadana', icon: 'megaphone' },
-  { id: 'nosotros', label: 'Nosotros', icon: 'users' },
+  { id: 'denuncia', label: 'Denuncia ciudadana', icon: 'megaphone' },
 ]
 
 const scrollTo = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -169,7 +169,36 @@ function Ticker() {
 
 // ─── KPIs ────────────────────────────────────────────────────────────────────
 
+// Solo llegan los expedientes que ya tienen una nota visible (regla en 05_expedientes.sql)
+function useExpedientes() {
+  const [rows, setRows] = useState([])
+  useEffect(() => {
+    if (!supabaseReady) return
+    supabase.from('expedientes').select('estado, municipio, categoria').then(({ data }) => setRows(data || []))
+  }, [])
+  return rows
+}
+
+function useKpis() {
+  const rows = useExpedientes()
+  const [respuestas, setRespuestas] = useState(0)
+  useEffect(() => {
+    if (!supabaseReady) return
+    supabase.from('expediente_respuestas').select('id', { count: 'exact', head: true })
+      .then(({ count }) => setRespuestas(count || 0))
+  }, [])
+  const activos = rows.filter(x => x.estado !== 'cerrado' && x.municipio).map(x => x.municipio)
+  return {
+    abiertos: rows.filter(x => x.estado === 'abierto' || x.estado === 'investigacion').length,
+    seguimiento: rows.filter(x => x.estado === 'seguimiento').length,
+    cerrados: rows.filter(x => x.estado === 'cerrado').length,
+    respuestas,
+    municipios: new Set(activos).size,
+  }
+}
+
 function Kpis() {
+  const values = useKpis()
   return (
     <div className="kpis">
       {KPIS.map((k, i) => (
@@ -185,8 +214,7 @@ function Kpis() {
           <div>
             <p className="kpi-label">{k.label}</p>
             <p className="kpi-value">
-              <Counter value={k.value} />{k.suffix}
-              <span className="kpi-delta">▲ {k.delta}</span>
+              <Counter value={values[k.key]} />{k.key === 'municipios' && ` / ${MUNICIPIOS.length}`}
             </p>
             <p className="kpi-note">{k.note}</p>
           </div>
@@ -201,8 +229,8 @@ function Kpis() {
         <div className="kpi-alert-top">
           <Icon name="megaphone" size={30} stroke={1.6} />
           <div>
-            <p className="kpi-label">Denuncias ciudadanas este mes</p>
-            <p className="kpi-value"><Counter value={342} /><span className="kpi-delta">▲ 18%</span></p>
+            <p className="kpi-label">Denuncia ciudadana</p>
+            <p className="kpi-note">Cuéntanos qué pasa en tu calle</p>
           </div>
         </div>
         <Btn variant="danger" size="sm" iconRight="arrow" block onClick={() => scrollTo('denuncia')}>
@@ -215,29 +243,53 @@ function Kpis() {
 
 // ─── Mapa + ranking ──────────────────────────────────────────────────────────
 
+// Cada nota visible suma a su municipio en el mapa y en el ranking
+function useNotasMapa() {
+  const [notas, setNotas] = useState([])
+  useEffect(() => {
+    if (!supabaseReady) return
+    supabase
+      .from('noticias')
+      .select('municipio, published_at, expedientes(categoria)')
+      .eq('published', true)
+      .lte('published_at', new Date().toISOString())
+      .not('municipio', 'is', null)
+      .then(({ data }) => setNotas(data || []))
+  }, [])
+  return notas
+}
+
 function MapRow() {
   const [mode, setMode] = useState('total')
-  const rows = useMemo(
-    () => [...MUNICIPIOS].sort((a, b) => b[mode] - a[mode]).slice(0, 10),
-    [mode],
-  )
+  const notas = useNotasMapa()
+  const rows = useMemo(() => {
+    const desde = Date.now() - 30 * 24 * 60 * 60 * 1000
+    return MUNICIPIOS
+      .map(m => {
+        const propias = notas.filter(n => n.municipio === m.name)
+        return { ...m, total: propias.length, mes: propias.filter(n => new Date(n.published_at) >= desde).length }
+      })
+      .filter(m => m[mode] > 0)
+      .sort((a, b) => b[mode] - a[mode])
+      .slice(0, 10)
+  }, [mode, notas])
   return (
     <div className="row row--map">
       <Panel id="mapa" className="panel--map">
-        <PanelHead icon="map" title="Mapa de calor" sub="Intensidad de incidentes y expedientes · Estado de México">
+        <PanelHead icon="map" title="Mapa de calor" sub="Intensidad de notas publicadas · Zona metropolitana">
           <span className="chip-live"><span className="live-dot" />Actualizado</span>
         </PanelHead>
-        <HeatMap />
+        <HeatMap notas={notas} />
       </Panel>
       <Panel className="panel--rank" delay={0.1}>
-        <PanelHead icon="chart" title="Ranking de municipios" sub="Por número de expedientes" />
+        <PanelHead icon="chart" title="Ranking de municipios" sub="Por número de notas publicadas" />
         <Tabs
           id="rank"
-          items={[{ id: 'total', label: 'Total' }, { id: 'mes', label: 'Último mes' }]}
+          items={[{ id: 'total', label: 'Total' }, { id: 'mes', label: 'Últimos 30 días' }]}
           value={mode}
           onChange={setMode}
         />
-        <RankBars rows={rows} valueKey={mode} />
+        {rows.length ? <RankBars rows={rows} valueKey={mode} /> : <p className="alerts-empty">Próximamente...</p>}
       </Panel>
     </div>
   )
@@ -245,35 +297,70 @@ function MapRow() {
 
 // ─── Datos ───────────────────────────────────────────────────────────────────
 
+// Notas visibles por mes, de hace 11 meses al actual
+function useTendencia() {
+  const [notas, setNotas] = useState([])
+  useEffect(() => {
+    if (!supabaseReady) return
+    const now = new Date()
+    supabase
+      .from('noticias')
+      .select('published_at')
+      .eq('published', true)
+      .gte('published_at', new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString())
+      .lte('published_at', now.toISOString())
+      .then(({ data }) => setNotas(data || []))
+  }, [])
+  return useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
+      const m = d.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '')
+      return {
+        m: m[0].toUpperCase() + m.slice(1),
+        v: notas.filter(n => {
+          const p = new Date(n.published_at)
+          return p.getFullYear() === d.getFullYear() && p.getMonth() === d.getMonth()
+        }).length,
+      }
+    })
+  }, [notas])
+}
+
 function DataRow() {
-  const total = ESTATUS.reduce((a, s) => a + s.value, 0)
+  const expedientes = useExpedientes()
+  const tendencia = useTendencia()
+  const total = expedientes.length
+  // Lo que no tiene categoría cuenta como "Otros"
+  const incidentes = INCIDENTES.map(c => {
+    const n = expedientes.filter(x => (x.categoria || 'Otros') === c.label).length
+    return { ...c, value: total ? Math.round((n / total) * 100) : 0 }
+  })
+  const estatus = ESTATUS.map(s => ({ ...s, value: expedientes.filter(x => x.estado === s.estado).length }))
   return (
     <div className="row row--data" id="datos">
       <Panel>
-        <PanelHead icon="layers" title="Tipo de incidentes" sub="En expedientes abiertos" />
-        <Donut data={INCIDENTES} total={1284} label="expedientes" />
+        <PanelHead icon="layers" title="Tipo de incidentes" sub="En todos los expedientes" />
+        {total ? <Donut data={incidentes} total={total} label={total === 1 ? 'expediente' : 'expedientes'} /> : <p className="alerts-empty">Próximamente...</p>}
       </Panel>
       <Panel delay={0.08}>
-        <PanelHead icon="chart" title="Tendencia de Denuncia Ciudadana" sub="Últimos 12 meses">
-          <span className="big-delta">+62%</span>
-        </PanelHead>
-        <TrendLine data={TENDENCIA} />
+        <PanelHead icon="chart" title="Tendencia de notas publicadas" sub="Últimos 12 meses" />
+        {tendencia.some(d => d.v) ? <TrendLine data={tendencia} /> : <p className="alerts-empty">Próximamente...</p>}
       </Panel>
       <Panel delay={0.16}>
         <PanelHead icon="folder" title="Estatus" sub={`Total: ${total.toLocaleString('es-MX')}`} />
         <div className="status-list">
-          {ESTATUS.map(s => (
+          {estatus.map(s => (
             <div key={s.label} className={`status status--${s.tone}`}>
               <span className="status-ico"><Icon name={s.icon} size={22} /></span>
               <div>
                 <p className="status-val"><Counter value={s.value} /></p>
-                <p className="status-label">{s.label} · {((s.value / total) * 100).toFixed(1)}%</p>
+                <p className="status-label">{s.label} · {total ? ((s.value / total) * 100).toFixed(1) : 0}%</p>
               </div>
               <motion.span
                 className="status-bar"
                 initial={{ scaleX: 0 }}
-                whileInView={{ scaleX: s.value / total }}
-                viewport={{ once: true }}
+                animate={{ scaleX: total ? s.value / total : 0 }}
                 transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
               />
             </div>
@@ -286,20 +373,20 @@ function DataRow() {
 
 // ─── Destacado + alertas ─────────────────────────────────────────────────────
 
-// Últimas noticias publicadas (admin → Noticias). Sin noticias: alertas de ejemplo.
+// Últimas noticias publicadas (admin → Noticias). null: todavía cargando.
 function useAlertas() {
-  const [items, setItems] = useState(ALERTAS)
+  const [items, setItems] = useState(null)
   useEffect(() => {
-    if (!supabaseReady) return
+    if (!supabaseReady) return setItems([])
     supabase
       .from('noticias')
-      .select('*') // incluye "nivel" si ya se corrió 04_noticias_portada.sql
+      .select('*, expedientes(estado)')
       .eq('published', true)
+      .lte('published_at', new Date().toISOString()) // las programadas esperan a su hora
       .order('published_at', { ascending: false })
-      .limit(6)
+      .limit(20)
       .then(({ data }) => {
         const rows = (data || []).filter(n => PERSONAJES[n.personaje])
-        if (!rows.length) return
         const today = new Date().toDateString()
         setItems(rows.map((n, i) => {
           const d = new Date(n.published_at)
@@ -311,6 +398,7 @@ function useAlertas() {
               : d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
             municipio: n.municipio || 'Edomex',
             text: n.title,
+            expediente: n.expedientes?.estado,
             level: n.nivel || (i < 2 ? 'alta' : i < 4 ? 'media' : 'baja'),
           }
         }))
@@ -319,32 +407,93 @@ function useAlertas() {
   return items
 }
 
-// Noticia marcada como destacada en el admin; sin ninguna, se queda la imagen de Narizio.
-function useDestacada() {
-  const [nota, setNota] = useState(null)
-  useEffect(() => {
-    if (!supabaseReady) return
-    supabase
-      .from('noticias')
-      .select('*')
-      .eq('published', true)
-      .eq('destacada', true)
-      .order('published_at', { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        const n = data?.[0]
-        if (n && PERSONAJES[n.personaje] && (n.video_url || n.cover_url)) setNota(n)
-      })
-  }, [])
-  return nota
+// ─── ¿Qué es Xpediente Callejero? ────────────────────────────────────────────
+
+const PILARES = [
+  { icon: 'search', title: 'Investigación periodística', text: 'Reportajes que documentan irregularidades con datos, fuentes y evidencia.' },
+  { icon: 'megaphone', title: 'Denuncia ciudadana', text: 'La voz de los vecinos convertida en expediente público.' },
+  { icon: 'shield', title: 'Rendición de cuentas', text: 'Seguimiento a cada caso hasta exigir respuestas a la autoridad.' },
+  { icon: 'drone', title: 'Evidencia aérea', text: 'Drones que muestran desde arriba lo que no se ve al ras de calle.' },
+]
+
+function Manifiesto() {
+  const [abierto, setAbierto] = useState(null)
+  return (
+    <section className="mani" id="nosotros" aria-labelledby="mani-title">
+      <p className="mani-masthead" aria-hidden><span>¿Quiénes somos?</span><span>Investigación · Denuncia · Seguimiento</span><span>Año I · Edición digital</span></p>
+      <span className="mani-x" aria-hidden>X</span>
+      <span className="mani-corner mani-corner--br" aria-hidden />
+
+      <div className="mani-main">
+        <div className="mani-head">
+          <p className="mani-kicker"><span className="live-dot" /> Medio digital de la zona metropolitana</p>
+          <h2 id="mani-title" className="mani-title">
+            La calle ya tiene <span className="mani-hl"><span className="mani-hl-x">x</span>pediente.</span>
+          </h2>
+          <p className="mani-stamp-wrap"><span className="mani-stamp">Donde la noticia la hacemos todos</span></p>
+        </div>
+        <div className="mani-copy">
+          <p className="mani-lead">
+            <strong>Xpediente Callejero</strong> somos un <strong>medio digital de la zona metropolitana</strong> enfocado
+            en la investigación periodística, la denuncia ciudadana y el seguimiento de asuntos públicos, para{' '}
+            <mark>visibilizar problemáticas, documentar irregularidades y exigir rendición de cuentas</mark>.
+          </p>
+          <p className="mani-text">
+            A través de reportajes, redes sociales y evidencias aéreas con drones, acerca a la ciudadanía una visión
+            diferente, crítica y visual de lo que sucede en sus calles y comunidades.
+          </p>
+        </div>
+      </div>
+
+      <ul className="mani-pillars">
+        {PILARES.map((p, i) => {
+          const on = abierto === i
+          return (
+            <li key={p.title} className={`mani-pillar${on ? ' mani-pillar--on' : ''}`}>
+              <button type="button" className="mani-pillar-head" aria-expanded={on} onClick={() => setAbierto(on ? null : i)}>
+                <span className="mani-pillar-ico"><Icon name={p.icon} size={18} /></span>
+                <span className="mani-pillar-title">{p.title}</span>
+                <span className="mani-pillar-more" aria-hidden><Icon name="arrow" size={14} /></span>
+              </button>
+              <AnimatePresence initial={false}>
+                {on && (
+                  <motion.div className="mani-pillar-drop" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }}>
+                    <p className="mani-pillar-text">{p.text}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+function PerfilCard({ who, img, imgPos, role, tag, reverse }) {
+  const navigate = useNavigate()
+  const p = PERSONAJES[who]
+  return (
+    <Panel className="panel--perfil">
+      <div className={`liz-card${reverse ? ' liz-card--rev' : ''}`}>
+        <img className="liz-card-img" src={img} alt={p.name} loading="lazy" style={imgPos ? { objectPosition: imgPos } : undefined} />
+        <div className="liz-card-body">
+          <h3 className="liz-card-name">{p.name}</h3>
+          <p className="liz-card-role">{role}</p>
+          {tag && <p className="liz-card-tag">{tag}</p>}
+          <Btn as="a" variant="ghost" size="sm" iconRight="arrow" className="liz-card-btn" href={`/personaje/${p.slug}`}
+            onClick={e => { e.preventDefault(); navigate(`/personaje/${p.slug}`) }}>
+            Ver todos
+          </Btn>
+        </div>
+      </div>
+    </Panel>
+  )
 }
 
 function FeaturedRow() {
   const navigate = useNavigate()
   const alertas = useAlertas()
-  const destacada = useDestacada()
-  const dp = destacada && PERSONAJES[destacada.personaje]
-  const playable = /\.(mp4|webm|mov)(\?|$)/i.test(destacada?.video_url || '')
 
   // Abre la página del personaje con la noticia ya abierta en su pop-up
   const openAlert = a => {
@@ -356,46 +505,13 @@ function FeaturedRow() {
   }
   return (
     <div className="row row--featured">
-      <Panel className="panel--featured">
-        <PanelHead icon="play" title="Narizio Olfario" sub={dp ? `${dp.name} · ${destacada.title}` : 'Presentador principal'}>
-          <Btn as="a" variant="ghost" size="sm" iconRight="arrow" href={`/personaje/${PERSONAJES.narizio.slug}`}
-            onClick={e => { e.preventDefault(); navigate(`/personaje/${PERSONAJES.narizio.slug}`) }}>
-            Ver todos
-          </Btn>
+      <Panel className="panel--alerts" delay={0.1}>
+        <PanelHead icon="alert" title="Esto me huele a" sub="Noticias de alto impacto de la zona metropolitana">
+          {alertas?.length > 0 && <span className="chip-live chip-live--red"><span className="live-dot" />En vivo</span>}
         </PanelHead>
-        {destacada && playable ? (
-          <div className="feature feature--video">
-            <video src={destacada.video_url} poster={destacada.cover_url || undefined} controls playsInline preload="metadata" />
-          </div>
-        ) : destacada ? (
-          <button className="feature" onClick={() => navigate(`/personaje/${dp.slug}?nota=${destacada.id}`)} aria-label={`Ver: ${destacada.title}`}>
-            <img src={destacada.cover_url || dp.img} alt="" />
-            <span className="feature-shade" />
-            <span className="play"><Icon name="play" size={26} /></span>
-          </button>
-        ) : (
-          <div className="feature feature--still">
-            <img src="/presentador.png" alt="Narizio Olfario, presentador principal de Xpediente Callejero" />
-          </div>
-        )}
-      </Panel>
-      <Panel className="panel--lizzet" delay={0.1}>
-        <PanelHead icon="play" title="Lizzet Arriaga" sub="Periodismo local: desde el aire lo vemos, pero al ras de calle lo entendemos.">
-          <Btn as="a" variant="ghost" size="sm" iconRight="arrow" href={`/personaje/${PERSONAJES.lizzet.slug}`}
-            onClick={e => { e.preventDefault(); navigate(`/personaje/${PERSONAJES.lizzet.slug}`) }}>
-            Ver todos
-          </Btn>
-        </PanelHead>
-        <div className="feature feature--video">
-          <video src="/lizzete_video.mp4" poster="/lizzet_arriaga.jpg" controls playsInline preload="metadata" />
-        </div>
-      </Panel>
-      <Panel className="panel--alerts" delay={0.15}>
-        <PanelHead icon="alert" title="Notas en General" sub="Hechos de alto impacto en el Estado de México">
-          <span className="chip-live chip-live--red"><span className="live-dot" />En vivo</span>
-        </PanelHead>
+        {alertas?.length === 0 && <p className="alerts-empty">Próximamente...</p>}
         <ul className="alerts">
-          {alertas.map((a, i) => (
+          {(alertas || []).map((a, i) => (
             <motion.li
               key={a.id || i}
               className={`alert alert--${a.level}`}
@@ -418,7 +534,10 @@ function FeaturedRow() {
               />
               <span className="alert-time">{a.time}</span>
               <span className="alert-muni">{a.municipio}</span>
-              <span className="alert-text">{a.text}</span>
+              <span className="alert-text">
+                {a.expediente && <span className="exp-badge">Expediente · {estadoLabel(a.expediente)}</span>}
+                {a.text}
+              </span>
             </motion.li>
           ))}
         </ul>
@@ -576,20 +695,58 @@ function ExpedienteModal({ sec, onClose }) {
 
 // ─── Evidencia aérea + voces ─────────────────────────────────────────────────
 
-function EvidenceRow({ onOpen }) {
-  const main = SECCIONES[1]
-  const thumbs = [SECCIONES[6], SECCIONES[7], SECCIONES[9]]
+const youtubeThumb = url => {
+  const id = youtubeId(url)
+  return id && `https://img.youtube.com/vi/${id}/hqdefault.jpg`
+}
+
+// Últimas notas visibles de los personajes de un panel, listas para pintarse
+function useNotasPanel(panel) {
+  const navigate = useNavigate()
+  const [notas, setNotas] = useState([])
+  useEffect(() => {
+    if (!supabaseReady) return
+    supabase
+      .from('noticias')
+      .select('id, personaje, title, municipio, cover_url, video_url, link_url')
+      .in('personaje', PANELES_PORTADA[panel].personajes)
+      .eq('published', true)
+      .lte('published_at', new Date().toISOString())
+      .order('published_at', { ascending: false })
+      .limit(4)
+      .then(({ data }) => setNotas(data || []))
+  }, [panel])
+  return notas.map(n => {
+    const p = PERSONAJES[n.personaje]
+    return {
+      key: n.id,
+      title: n.title,
+      municipio: n.municipio,
+      who: p.name,
+      img: n.cover_url || youtubeThumb(n.video_url) || youtubeThumb(n.link_url) || p.img,
+      link: n.link_url || n.video_url,
+      open: () => navigate(`/personaje/${p.slug}?nota=${n.id}`),
+    }
+  })
+}
+
+function EvidenceRow() {
+  const [main, ...thumbs] = useNotasPanel('evidencia')
+  const voces = useNotasPanel('voces').slice(0, 3)
   return (
     <div className="row row--evidence">
       <Panel id="evidencia">
         <PanelHead icon="drone" title="Evidencia aérea - Halcón Negro" sub="El Ojo que Todo lo Ve · imágenes de dron en zonas de investigación">
-          <Btn as="a" variant="ghost" size="sm" iconRight="ext" href={main.link} target="_blank" rel="noopener noreferrer">
-            Ver video
-          </Btn>
+          {main?.link && (
+            <Btn as="a" variant="ghost" size="sm" iconRight="ext" href={main.link} target="_blank" rel="noopener noreferrer">
+              Ver video
+            </Btn>
+          )}
         </PanelHead>
-        <div className="evi">
-          <button className="evi-main" onClick={() => onOpen(main)}>
-            <img src={main.imgSrc} alt="" />
+        {!main ? <p className="alerts-empty">Próximamente...</p> : (
+        <div className={`evi${thumbs.length ? '' : ' evi--solo'}`}>
+          <button className="evi-main" onClick={main.open}>
+            <img src={main.img} alt="" />
             <span className="evi-hud" aria-hidden>
               <span className="hud-c hud-c--tl" /><span className="hud-c hud-c--tr" />
               <span className="hud-c hud-c--bl" /><span className="hud-c hud-c--br" />
@@ -601,29 +758,35 @@ function EvidenceRow({ onOpen }) {
               <span>{main.title}</span>
             </span>
           </button>
-          <div className="evi-thumbs">
+          {thumbs.length > 0 && <div className="evi-thumbs">
             {thumbs.map(t => (
-              <motion.button key={t.num} className="evi-thumb" onClick={() => onOpen(t)} whileHover={{ x: 4 }}>
-                <img src={t.imgSrc} alt="" loading="lazy" />
+              <motion.button key={t.key} className="evi-thumb" onClick={t.open} whileHover={{ x: 4 }}>
+                <img src={t.img} alt="" loading="lazy" />
                 <span>
                   <strong>{t.title}</strong>
                   <em>{t.municipio}</em>
                 </span>
               </motion.button>
             ))}
-          </div>
+          </div>}
         </div>
+        )}
       </Panel>
       <Panel className="panel--voices" delay={0.1}>
         <PanelHead icon="quote" title="La voz de la banqueta" sub="La ciudadanía también investiga" />
-        <figure className="voice">
-          <img src="/entrevista.jpeg" alt="Entrevista en campo de Xpediente Callejero" />
-          <blockquote>
-            “Cuando las instituciones fallan en documentar, la calle asume esa responsabilidad.
-            No como sustituto, sino como evidencia.”
-          </blockquote>
-          <figcaption>— Manifiesto editorial · Xpediente Callejero</figcaption>
-        </figure>
+        {voces.length > 0 ? (
+          <div className="evi-thumbs">
+            {voces.map(v => (
+              <motion.button key={v.key} className="evi-thumb" onClick={v.open} whileHover={{ x: 4 }}>
+                <img src={v.img} alt="" loading="lazy" />
+                <span>
+                  <strong>{v.title}</strong>
+                  <em>{v.who}{v.municipio && ` · ${v.municipio}`}</em>
+                </span>
+              </motion.button>
+            ))}
+          </div>
+        ) : <p className="alerts-empty">Próximamente...</p>}
       </Panel>
     </div>
   )
@@ -728,9 +891,43 @@ function Denuncia() {
 
 // ─── Footer ──────────────────────────────────────────────────────────────────
 
+const REDES = [
+  {
+    name: 'Facebook',
+    url: 'https://www.facebook.com/xpedientecallejerodigital',
+    icon: <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />,
+  },
+  {
+    name: 'YouTube',
+    url: 'https://www.youtube.com/@xpedientecallejero',
+    icon: <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />,
+  },
+  {
+    name: 'TikTok',
+    url: 'https://www.tiktok.com/@xpediente.calleje',
+    icon: <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" />,
+  },
+  {
+    name: 'X',
+    url: 'https://x.com/xpedientecallej',
+    icon: <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />,
+  },
+  {
+    name: 'Instagram',
+    url: 'https://www.instagram.com/xpediente.callejero',
+    icon: (
+      <>
+        <rect x="2" y="2" width="20" height="20" rx="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="12" cy="12" r="4.6" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle cx="17.6" cy="6.4" r="1.4" />
+      </>
+    ),
+  },
+]
+
 function Footer({ onGo }) {
   return (
-    <footer className="footer" id="nosotros">
+    <footer className="footer" id="contacto">
       <div className="footer-grid">
         <div>
           <div className="footer-brand"><span className="stamp stamp--lg" aria-hidden />Xpediente Callejero</div>
@@ -751,7 +948,15 @@ function Footer({ onGo }) {
           <p className="footer-heading">Contacto</p>
           <ul className="footer-list">
             <li><a href="https://www.xpedientecallejero.com">www.xpedientecallejero.com</a></li>
-            <li><span>@xpediente.callejero</span></li>
+          </ul>
+          <ul className="footer-social">
+            {REDES.map(r => (
+              <li key={r.name}>
+                <a href={r.url} target="_blank" rel="noopener noreferrer" aria-label={r.name} title={r.name}>
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden>{r.icon}</svg>
+                </a>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
@@ -820,19 +1025,22 @@ export default function App() {
       <Sidebar active={active} open={menu} onClose={() => setMenu(false)} />
       <div className="main">
         <Header query={query} setQuery={setQuery} onMenu={() => setMenu(true)} />
-        <Ticker />
+        {/* Última hora oculta por el momento: <Ticker /> */}
         <main className="content">
+          <Manifiesto />
+          <PerfilCard who="lizzet" img="/lizzet_a.png" role="Periodista y abogada" tag="Periodismo local: desde el aire lo vemos, pero al ras de calle lo entendemos." />
+          <PerfilCard who="narizio" reverse img={PERSONAJES.narizio.img} imgPos="center 22%" role="Presentador de Xpediente Callejero" />
           <FeaturedRow />
           <Expedientes query={query} setQuery={setQuery} cat={cat} setCat={setCat} />
           <Kpis />
           <MapRow />
           <DataRow />
-          <EvidenceRow onOpen={setOpenSec} />
+          <EvidenceRow />
           <Denuncia />
         </main>
         <Footer onGo={goToCat} />
       </div>
-      <WhatsAppFab />
+      {/* Botón flotante de WhatsApp oculto por el momento: <WhatsAppFab /> */}
       <TeaserIntro src={TEASER_VIDEO} closable={TEASER_CLOSABLE} />
       <ExpedienteModal sec={openSec} onClose={closeSec} />
     </div>

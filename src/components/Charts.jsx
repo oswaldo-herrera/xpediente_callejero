@@ -10,7 +10,7 @@ export function RankBars({ rows, valueKey }) {
   return (
     <ol ref={ref} className="rank">
       {rows.map((r, i) => (
-        <li key={r.name} className="rank-row" title={`${r.name}: ${r[valueKey]} expedientes`}>
+        <li key={r.name} className="rank-row" title={`${r.name}: ${r[valueKey]} ${r[valueKey] === 1 ? 'nota' : 'notas'}`}>
           <span className={`rank-num${i < 3 ? ' rank-num--top' : ''}`}>{i + 1}</span>
           <span className="rank-name">{r.name}</span>
           <span className="rank-track">
@@ -50,6 +50,7 @@ export function Donut({ data, total, label }) {
     <div className="donut">
       <svg viewBox="0 0 180 180" className="donut-svg" role="img" aria-label={`${label}: distribución por tipo`}>
         {data.map((d, i) => {
+          if (!d.value) return null
           const a0 = acc + gap / 2
           const a1 = acc + (d.value / sum) * Math.PI * 2 - gap / 2
           acc += (d.value / sum) * Math.PI * 2
@@ -98,7 +99,7 @@ export function Donut({ data, total, label }) {
 export function TrendLine({ data }) {
   const [hi, setHi] = useState(null)
   const W = 420, H = 170, pl = 34, pr = 12, pt = 14, pb = 26
-  const max = Math.ceil(Math.max(...data.map(d => d.v)) / 50) * 50
+  const max = Math.max(10, Math.ceil(Math.max(...data.map(d => d.v)) / 10) * 10)
   const x = i => pl + (i * (W - pl - pr)) / (data.length - 1)
   const y = v => pt + (1 - v / max) * (H - pt - pb)
   const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)},${y(d.v)}`).join('')
@@ -120,7 +121,7 @@ export function TrendLine({ data }) {
         viewBox={`0 0 ${W} ${H}`}
         className="trend-svg"
         role="img"
-        aria-label="Expedientes por mes, últimos 12 meses"
+        aria-label="Notas publicadas por mes, últimos 12 meses"
         onPointerMove={onMove}
         onPointerLeave={() => setHi(null)}
       >
@@ -168,7 +169,7 @@ export function TrendLine({ data }) {
       </svg>
       {hi != null && (
         <div className="tip" style={{ left: `${(x(hi) / W) * 100}%`, top: `${(y(data[hi].v) / H) * 100}%` }}>
-          <strong>{data[hi].v}</strong> expedientes · {data[hi].m}
+          <strong>{data[hi].v}</strong> {data[hi].v === 1 ? 'nota' : 'notas'} · {data[hi].m}
         </div>
       )}
     </div>

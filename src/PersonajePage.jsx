@@ -2,28 +2,19 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import './App.css'
-import { PERSONAJES, TEASER_VIDEO, TEASER_CLOSABLE } from './data'
+import { PERSONAJES, TEASER_VIDEO, TEASER_CLOSABLE, estadoLabel, youtubeId } from './data'
 import { supabase, supabaseReady } from './lib/supabase'
 import { Btn, Icon, StatusBadge } from './components/ui'
 import TeaserIntro from './components/TeaserIntro'
 
 const fmtDate = d => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
 const isFile = url => /\.(mp4|webm|mov)(\?|$)/i.test(url || '')
-const youtubeId = url => (url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{11})/)?.[1]
 
-// La nota con la que arrancó su sección (data.js) se muestra como la primera noticia
-const originalNote = s => ({
-  id: `original-${s.num}`,
-  title: s.title,
-  summary: s.tagline || s.desc,
-  body: s.intro,
-  cover_url: s.imgSrc,
-  video_url: s.video || null,
-  link_url: s.link,
-  municipio: s.municipio,
-  dateLabel: s.date,
-  status: s.status,
-})
+// Portada de la tarjeta: la imagen inicial o, si no hay, la miniatura de YouTube
+const cardImg = n => {
+  const id = youtubeId(n.video_url) || youtubeId(n.link_url)
+  return n.cover_url || (id && `https://img.youtube.com/vi/${id}/hqdefault.jpg`)
+}
 
 // ─── Detalle de una noticia ──────────────────────────────────────────────────
 
@@ -54,6 +45,7 @@ function NoticiaModal({ n, onClose }) {
           >
             <button className="modal-close" onClick={onClose} aria-label="Cerrar"><Icon name="close" /></button>
             <p className="modal-kicker">{n.dateLabel || fmtDate(n.published_at)}{n.municipio && ` · ${n.municipio}`}</p>
+            {n.expedientes && <span className="exp-badge">Expediente · {estadoLabel(n.expedientes.estado)}</span>}
             <h2 className="sp-modal-title">{n.title}</h2>
             {n.summary && <p className="exp-tagline exp-tagline--lg">{n.summary}</p>}
             <div className="sp-modal-media">
@@ -90,7 +82,6 @@ function NoticiaModal({ n, onClose }) {
 export default function PersonajePage() {
   const { slug } = useParams()
   const p = Object.values(PERSONAJES).find(x => x.slug === slug)
-  const s = p?.seccion
   const [news, setNews] = useState(null)
   const [open, setOpen] = useState(null)
   const [params] = useSearchParams()
@@ -114,9 +105,10 @@ export default function PersonajePage() {
     if (!p || !supabaseReady) return setNews([])
     supabase
       .from('noticias')
-      .select('*')
+      .select('*, expedientes(estado)')
       .eq('personaje', p.key)
       .eq('published', true)
+      .lte('published_at', new Date().toISOString())
       .order('published_at', { ascending: false })
       .then(({ data }) => setNews(data || []))
   }, [slug]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -132,7 +124,7 @@ export default function PersonajePage() {
     )
   }
 
-  const items = [...(news || []), ...(s ? [originalNote(s)] : [])]
+  const items = news || []
   const others = Object.values(PERSONAJES).filter(x => x.key !== p.key)
 
   return (
@@ -167,18 +159,9 @@ export default function PersonajePage() {
             <p className="adm-kicker">{p.kicker || 'Personaje'} · Xpediente Callejero</p>
             <h1 className="sp-title">{p.name}</h1>
             {p.segmento && <p className="sp-segment">{p.segmento}</p>}
-            {s ? (
-              <>
-                <p className="sp-host">En la sección <strong>{s.name}</strong></p>
-                <p className="sp-desc">{s.desc}</p>
-                {s.tagline && <p className="exp-tagline exp-tagline--lg">{s.tagline}</p>}
-              </>
-            ) : (
-              <p className="sp-desc">Muy pronto sus historias en Xpediente Callejero.</p>
-            )}
+            {news?.length === 0 && <p className="sp-desc">Muy pronto sus historias en Xpediente Callejero.</p>}
             <div className="sp-meta">
               <span><strong>{items.length}</strong> {items.length === 1 ? 'noticia' : 'noticias'}</span>
-              {s && <span><Icon name="pin" size={14} /> {s.municipio}</span>}
             </div>
           </div>
         </motion.section>
@@ -206,12 +189,13 @@ export default function PersonajePage() {
                   whileHover={{ y: -6 }}
                 >
                   <span className="sp-card-media">
-                    {n.cover_url ? <img src={n.cover_url} alt="" loading="lazy" /> : <span className="sp-card-ph"><Icon name="doc" size={30} /></span>}
+                    {cardImg(n) ? <img src={cardImg(n)} alt="" loading="lazy" /> : <span className="sp-card-ph"><Icon name="doc" size={30} /></span>}
                     {(n.video_url || youtubeId(n.link_url)) && <span className="exp-play sp-card-play"><Icon name="play" size={18} /></span>}
                     {i === 0 && news?.length > 0 && <span className="exp-cat">Nuevo</span>}
                   </span>
                   <span className="sp-card-body">
                     <span className="sp-card-date">{n.dateLabel || fmtDate(n.published_at)}{n.municipio && ` · ${n.municipio}`}</span>
+                    {n.expedientes && <span className="exp-badge">Expediente · {estadoLabel(n.expedientes.estado)}</span>}
                     <span className="exp-title">{n.title}</span>
                     {n.summary && <span className="sp-card-sum">{n.summary}</span>}
                     {n.status && <StatusBadge status={n.status} />}

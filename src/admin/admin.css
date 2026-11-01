@@ -620,3 +620,22 @@
   .nf-step { padding: 12px; }
   .nf-levels { grid-template-columns: 1fr; }
 }
+
+/* ── Expedientes ─────────────────────────────────────────────────────────── */
+.xrow { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,.02); }
+.xrow-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.xrow-main { flex: 1; min-width: 220px; }
+.xrow-edit { flex: 1; min-width: 260px; }
+.xrow-estado { width: 190px; }
+.xrow-count { margin: 0; }
+.xrow-block { display: flex; flex-direction: column; gap: 8px; }
+.xrow-list { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); }
+.xrow-list li + li { margin-top: 4px; }
+.xrow-resp a { color: var(--red-2); }
+.xrow-resp { position: relative; padding-right: 26px; }
+.xrow-x { position: absolute; top: 0; right: 0; display: grid; padding: 2px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.xrow-x:hover { color: var(--red-2); }
+.xrow-add { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 760px) { .xrow-add { grid-template-columns: minmax(0, 1fr); } }
+
+.nf-yt-ok { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--green); }

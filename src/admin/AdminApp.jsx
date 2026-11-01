@@ -8,6 +8,7 @@ import { Btn, Icon } from '../components/ui'
 import VideosModule from './VideosModule'
 import CalendarModule from './CalendarModule'
 import NoticiasModule from './NoticiasModule'
+import ExpedientesModule from './ExpedientesModule'
 
 // ─── Sesión ──────────────────────────────────────────────────────────────────
 
@@ -126,9 +127,9 @@ function NoAccess({ email, state }) {
 const MODULES = [
   { to: 'videos', label: 'Videos', icon: 'play' },
   { to: 'noticias', label: 'Noticias', icon: 'doc' },
+  { to: 'expedientes', label: 'Expedientes', icon: 'folder' },
   { to: 'calendario', label: 'Calendario', icon: 'clock' },
   { label: 'Denuncias', icon: 'megaphone', soon: true },
-  { label: 'Expedientes', icon: 'folder', soon: true },
   { label: 'Usuarios', icon: 'users', soon: true },
 ]
 
@@ -160,6 +161,7 @@ function Layout({ session }) {
           <Route index element={<Navigate to="videos" replace />} />
           <Route path="videos" element={<VideosModule />} />
           <Route path="noticias" element={<NoticiasModule />} />
+          <Route path="expedientes" element={<ExpedientesModule />} />
           <Route path="calendario" element={<CalendarModule />} />
           <Route path="*" element={<Navigate to="videos" replace />} />
         </Routes>

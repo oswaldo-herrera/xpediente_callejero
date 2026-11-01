@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase, videoUrl, uploadVideoFile, VIDEO_BUCKET, MAX_VIDEO_MB, VIDEO_TYPES } from '../lib/supabase'
-import { PERSONAJES, MUNICIPIOS_DENUNCIA } from '../data'
+import { PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, ESTADOS_EXPEDIENTE, CATEGORIAS_EXPEDIENTE, estadoLabel, youtubeId } from '../data'
 import { Btn, Icon, Tabs } from '../components/ui'
 
 const IMG_BUCKET = 'imagenes'
@@ -14,6 +14,13 @@ const NIVELES = [
   { id: 'alta', label: 'Alta', hint: 'Rojo · urgente' },
   { id: 'media', label: 'Media', hint: 'Naranja · relevante' },
   { id: 'baja', label: 'Baja', hint: 'Informativa' },
+]
+
+// ¿La nota es un caso con seguimiento? Las informativas no cuentan en los indicadores.
+const EXP_MODOS = [
+  { id: 'no', label: 'No', hint: 'Noticia informativa' },
+  { id: 'nuevo', label: 'Sí, nuevo', hint: 'Abre un caso' },
+  { id: 'existente', label: 'Sí, existente', hint: 'Sigue un caso abierto' },
 ]
 
 const pad = n => String(n).padStart(2, '0')
@@ -59,18 +66,21 @@ function Step({ n, title, hint, children }) {
 
 // ─── Formulario ──────────────────────────────────────────────────────────────
 
-function NoticiaForm({ item, videos, onClose, onSaved }) {
+function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
   const [form, setForm] = useState(() => item
     ? { ...EMPTY(), ...Object.fromEntries(Object.entries(item).map(([k, v]) => [k, v ?? ''])), published_at: toLocalInput(new Date(item.published_at)) }
     : EMPTY())
+  const [expModo, setExpModo] = useState(item?.expediente_id ? 'existente' : 'no')
+  const [expNuevo, setExpNuevo] = useState({ estado: 'abierto', categoria: '' })
   const [cover, setCover] = useState(null) // imagen inicial nueva (archivo)
   const [videoFile, setVideoFile] = useState(null) // video nuevo (archivo)
-  const [videoSrc, setVideoSrc] = useState(() => (!item?.video_url ? 'subir' : isLibraryVideo(item.video_url) ? 'biblioteca' : 'link'))
+  const [videoSrc, setVideoSrc] = useState(() => (!item?.video_url ? 'link' : isLibraryVideo(item.video_url) ? 'biblioteca' : 'link'))
   const [progress, setProgress] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const p = PERSONAJES[form.personaje]
+  const panel = Object.values(PANELES_PORTADA).find(x => x.personajes.includes(form.personaje))
 
   const coverPreview = useMemo(() => (cover ? URL.createObjectURL(cover) : form.cover_url), [cover, form.cover_url])
   useEffect(() => () => cover && URL.revokeObjectURL(coverPreview), [cover, coverPreview])
@@ -103,7 +113,13 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
     setBusy(true)
     setError('')
     let uploadedVideo = null
+    let nuevoExpediente = null
     try {
+      if (videoSrc === 'link' && /youtu\.?be/i.test(form.video_url) && !youtubeId(form.video_url)) {
+        throw new Error('No reconozco ese link de YouTube. Copia el enlace del video, por ejemplo https://youtu.be/…')
+      }
+      if (expModo === 'existente' && !form.expediente_id) throw new Error('Elige el expediente al que pertenece esta nota.')
+
       const now = new Date()
       const folder = `${now.getFullYear()}/${pad(now.getMonth() + 1)}`
 
@@ -134,6 +150,20 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
         video_url = videoUrl(uploadedVideo)
       }
 
+      let expediente_id = expModo === 'existente' ? form.expediente_id : null
+      if (expModo === 'nuevo') {
+        const { data, error: xErr } = await supabase.from('expedientes').insert({
+          title: form.title.trim(),
+          municipio: form.municipio || null,
+          categoria: expNuevo.categoria || null,
+          estado: expNuevo.estado,
+          closed_at: expNuevo.estado === 'cerrado' ? new Date().toISOString() : null,
+        }).select('id').single()
+        if (xErr) throw xErr
+        nuevoExpediente = data.id
+        expediente_id = data.id
+      }
+
       const row = {
         personaje: form.personaje,
         title: form.title.trim(),
@@ -145,6 +175,7 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
         municipio: form.municipio || null,
         nivel: form.nivel,
         destacada: form.destacada,
+        expediente_id,
         published: form.published,
         published_at: new Date(form.published_at).toISOString(),
       }
@@ -154,12 +185,15 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
       if (dbErr) throw dbErr
       onSaved()
     } catch (err) {
+      if (nuevoExpediente) await supabase.from('expedientes').delete().eq('id', nuevoExpediente)
       if (uploadedVideo) {
         await supabase.from('videos').delete().eq('storage_path', uploadedVideo)
         await supabase.storage.from(VIDEO_BUCKET).remove([uploadedVideo])
       }
       setError(/nivel|destacada/.test(err.message || '')
         ? 'Faltan columnas nuevas: ejecuta supabase/04_noticias_portada.sql en el SQL Editor de Supabase.'
+        : /expedientes|expediente_id/.test(err.message || '')
+        ? 'Falta crear los expedientes: ejecuta supabase/05_expedientes.sql en el SQL Editor de Supabase.'
         : err.message || 'No se pudo guardar la noticia.')
       setProgress(null)
       setBusy(false)
@@ -187,6 +221,7 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
           ))}
         </div>
         {p && <p className="nf-who-seg">Sección: <strong>{p.segmento}</strong></p>}
+        {panel && <p className="nf-who-seg">También sale en la portada, en <strong>{panel.title}</strong>.</p>}
       </Step>
 
       <Step n={2} title="La alerta" hint="Así aparece en «Alertas recientes» de la portada.">
@@ -202,6 +237,7 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
               <option>Estado de México</option>
               {MUNICIPIOS_DENUNCIA.map(m => <option key={m}>{m}</option>)}
             </select>
+            <span className="field-hint">Solo los municipios de la lista suman al mapa y al ranking.</span>
           </label>
           <label className="field">
             <span>Fecha y hora</span>
@@ -262,7 +298,7 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
             <Tabs
               id="nvsrc"
               small
-              items={[{ id: 'subir', label: 'Subir' }, { id: 'biblioteca', label: 'Biblioteca' }, { id: 'link', label: 'Pegar link' }]}
+              items={[{ id: 'link', label: 'Link de YouTube' }, { id: 'subir', label: 'Subir' }, { id: 'biblioteca', label: 'Biblioteca' }]}
               value={videoSrc}
               onChange={setVideoSrc}
             />
@@ -285,7 +321,14 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
             </select>
           )}
           {videoSrc === 'link' && (
-            <input className="cal-input" type="url" value={form.video_url} onChange={set('video_url')} placeholder="Link de YouTube o de un archivo .mp4" />
+            <>
+              <input className="cal-input" type="url" value={form.video_url} onChange={set('video_url')} placeholder="https://youtu.be/… o https://www.youtube.com/watch?v=…" />
+              {youtubeId(form.video_url) && (
+                <p className="field-hint nf-yt-ok">
+                  <Icon name="check" size={14} /> Video de YouTube detectado. Si está programado, pon la misma fecha y hora en el paso 2: en la web se reproduce hasta esa hora.
+                </p>
+              )}
+            </>
           )}
           {videoPreview && <video key={videoPreview} className="cal-preview" src={videoPreview} poster={coverPreview || undefined} controls preload="metadata" />}
           {progress !== null && (
@@ -314,7 +357,50 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
         </div>
       </Step>
 
-      <Step n={5} title="Dónde y cuándo sale">
+      <Step n={5} title="¿Esta nota es un expediente?" hint="Solo los expedientes suman a los indicadores de la portada.">
+        <div className="nf-levels" role="radiogroup" aria-label="¿Es un expediente?">
+          {EXP_MODOS.map(m => (
+            <button
+              type="button"
+              key={m.id}
+              role="radio"
+              aria-checked={expModo === m.id}
+              className={`nf-level${expModo === m.id ? ' nf-level--on' : ''}`}
+              onClick={() => setExpModo(m.id)}
+            >
+              <strong>{m.label}</strong><span>{m.hint}</span>
+            </button>
+          ))}
+        </div>
+        {expModo === 'nuevo' && (
+          <div className="adm-grid">
+            <label className="field">
+              <span>Estado</span>
+              <select value={expNuevo.estado} onChange={e => setExpNuevo(x => ({ ...x, estado: e.target.value }))}>
+                {ESTADOS_EXPEDIENTE.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Categoría</span>
+              <select value={expNuevo.categoria} onChange={e => setExpNuevo(x => ({ ...x, categoria: e.target.value }))}>
+                <option value="">Sin categoría</option>
+                {CATEGORIAS_EXPEDIENTE.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+        {expModo === 'existente' && (
+          <label className="field">
+            <span>Expediente</span>
+            <select value={form.expediente_id || ''} onChange={set('expediente_id')}>
+              <option value="">Elige un expediente…</option>
+              {expedientes.map(x => <option key={x.id} value={x.id}>{x.title} · {estadoLabel(x.estado)}</option>)}
+            </select>
+          </label>
+        )}
+      </Step>
+
+      <Step n={6} title="Dónde y cuándo sale">
         <div className="adm-grid">
           <label className="check field--full">
             <input type="checkbox" checked={form.destacada} onChange={set('destacada')} />
@@ -344,6 +430,7 @@ function NoticiaForm({ item, videos, onClose, onSaved }) {
 export default function NoticiasModule() {
   const [items, setItems] = useState(null)
   const [videos, setVideos] = useState([])
+  const [expedientes, setExpedientes] = useState([])
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('todos')
   const [modal, setModal] = useState(null) // { item? }
@@ -359,6 +446,8 @@ export default function NoticiasModule() {
     }
     setError('')
     setItems(data)
+    const { data: exps } = await supabase.from('expedientes').select('id, title, estado').order('created_at', { ascending: false })
+    setExpedientes(exps || [])
   }, [])
 
   useEffect(() => {
@@ -441,6 +530,7 @@ export default function NoticiasModule() {
                         {fmtDate(n.published_at)}{n.municipio && ` · ${n.municipio}`}
                         {n.video_url && ' · 🎬 video'}
                         {n.destacada && ' · ★ destacada'}
+                        {n.expediente_id && ' · 📁 expediente'}
                       </p>
                     </div>
                     <span className={`state ${!n.published ? 'state--pendiente' : scheduled ? 'state--hoy' : 'state--publicada'}`}>
@@ -479,6 +569,7 @@ export default function NoticiasModule() {
               <NoticiaForm
                 item={modal.item}
                 videos={videos}
+                expedientes={expedientes}
                 onClose={() => setModal(null)}
                 onSaved={() => { setModal(null); load() }}
               />
