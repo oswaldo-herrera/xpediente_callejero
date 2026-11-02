@@ -1412,6 +1412,8 @@ a { color: inherit; }
   transition: color .2s, background .2s, border-color .2s;
 }
 .footer-social a:hover { color: #fff; background: var(--yellow); border-color: var(--yellow); }
+.footer-visitas { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.footer-visitas strong { font-family: var(--mono); color: var(--red-2); }
 .footer-copy { margin: 24px 0 0; padding-top: 14px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); text-align: center; }
 
 /* ── WhatsApp flotante ───────────────────────────────────────────────── */

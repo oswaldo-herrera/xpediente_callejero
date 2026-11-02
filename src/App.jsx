@@ -968,7 +968,30 @@ const REDES = [
   },
 ]
 
+const VISITA_KEY = 'xc-visita-contada'
+
+// Suma una visita por sesión del navegador; en local solo lee, para no inflar la cifra
+function useVisitas() {
+  const [total, setTotal] = useState(null)
+  useEffect(() => {
+    if (!supabaseReady) return
+    let contada = !import.meta.env.PROD
+    try {
+      contada = contada || sessionStorage.getItem(VISITA_KEY) === '1'
+      if (!contada) sessionStorage.setItem(VISITA_KEY, '1')
+    } catch { /* sin almacenamiento: cuenta esta carga */ }
+    if (contada) {
+      supabase.from('contador_visitas').select('total').eq('id', 1).maybeSingle()
+        .then(({ data }) => data && setTotal(data.total))
+    } else {
+      supabase.rpc('registrar_visita').then(({ data }) => data != null && setTotal(data))
+    }
+  }, [])
+  return total
+}
+
 function Footer({ onGo }) {
+  const visitas = useVisitas()
   return (
     <footer className="footer" id="contacto">
       <div className="footer-grid">
@@ -976,6 +999,7 @@ function Footer({ onGo }) {
           <div className="footer-brand"><span className="stamp stamp--lg" aria-hidden />Xpediente Callejero</div>
           <p className="footer-desc">Periodismo de investigación y participación ciudadana desde el territorio del Estado de México. La calle ya tiene expediente.</p>
           <p className="footer-mono">DOSSIER · XC-2026 · EDOMEX · EDICIÓN DIGITAL</p>
+          {visitas != null && <p className="footer-visitas">Ya somos <strong>{Number(visitas).toLocaleString('es-MX')}</strong></p>}
         </div>
         <div>
           <p className="footer-heading">Secciones</p>
