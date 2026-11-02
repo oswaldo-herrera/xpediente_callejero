@@ -417,7 +417,7 @@ function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
           <label className="check field--full">
             <input type="checkbox" checked={form.destacada} onChange={set('destacada')} />
             <span className="check-box" />
-            Mostrar en «Video destacado» de la portada (se usa la destacada más reciente)
+            Fijar su video en el pop-up de bienvenida y el recuadro de la portada (si hay varias fijadas, se usa la más reciente)
           </label>
           <label className="check field--full">
             <input type="checkbox" checked={form.published} onChange={set('published')} />
@@ -541,7 +541,7 @@ export default function NoticiasModule() {
                         {n.nivel && <span className={`nrow-level nrow-level--${n.nivel}`}>{n.nivel}</span>}
                         {fmtDate(n.published_at)}{n.municipio && ` · ${n.municipio}`}
                         {n.video_url && ' · 🎬 video'}
-                        {n.destacada && ' · ★ destacada'}
+                        {n.destacada && ' · 📌 fijada en el pop-up'}
                         {n.expediente_id && ' · 📁 expediente'}
                       </p>
                     </div>

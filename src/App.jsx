@@ -474,7 +474,7 @@ function Manifiesto() {
   )
 }
 
-// Video de la nota más reciente, sea de quien sea; undefined mientras carga
+// Video de la nota fijada en el CRM o, si no hay, de la más reciente; vacío mientras carga
 function useUltimoVideo() {
   const [video, setVideo] = useState(supabaseReady ? {} : { url: WELCOME_VIDEO })
   useEffect(() => {
@@ -485,6 +485,7 @@ function useUltimoVideo() {
       .eq('published', true)
       .lte('published_at', new Date().toISOString())
       .or('video_url.not.is.null,link_url.not.is.null,video_movil_url.not.is.null')
+      .order('destacada', { ascending: false })
       .order('published_at', { ascending: false })
       .limit(20)
       .then(({ data }) => {

@@ -131,8 +131,8 @@ export const WHATSAPP_NUMBER = ''
 // admin (Supabase). Vacío = no se muestra la intro.
 export const TEASER_VIDEO = ''
 
-// Pop-up al entrar y recuadro en la franja de Lizzet: usan el video de la nota más
-// reciente de cualquier informante (CRM). Este solo se muestra si ninguna nota tiene video.
+// Pop-up al entrar y recuadro en la franja de Lizzet: usan el video de la nota fijada en el
+// CRM o, si no hay, el de la más reciente de cualquier informante. Este solo se muestra si ninguna nota tiene video.
 export const WELCOME_VIDEO = ''
 
 // En local (npm run dev) aparece la X para cerrarlo y entrar al sitio;
