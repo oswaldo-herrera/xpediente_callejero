@@ -41,6 +41,7 @@ const EMPTY = () => ({
   body: '',
   cover_url: '',
   video_url: '',
+  video_movil_url: '',
   link_url: '',
   municipio: '',
   nivel: 'media',
@@ -118,6 +119,9 @@ function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
       if (videoSrc === 'link' && /youtu\.?be/i.test(form.video_url) && !youtubeId(form.video_url)) {
         throw new Error('No reconozco ese link de YouTube. Copia el enlace del video, por ejemplo https://youtu.be/…')
       }
+      if (form.video_movil_url.trim() && !youtubeId(form.video_movil_url)) {
+        throw new Error('No reconozco el link de YouTube para celular. Copia el enlace del video o del short.')
+      }
       if (expModo === 'existente' && !form.expediente_id) throw new Error('Elige el expediente al que pertenece esta nota.')
 
       const now = new Date()
@@ -171,6 +175,7 @@ function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
         body: form.body.trim() || null,
         cover_url,
         video_url,
+        video_movil_url: form.video_movil_url.trim() || null,
         link_url: form.link_url.trim() || null,
         municipio: form.municipio || null,
         nivel: form.nivel,
@@ -190,7 +195,9 @@ function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
         await supabase.from('videos').delete().eq('storage_path', uploadedVideo)
         await supabase.storage.from(VIDEO_BUCKET).remove([uploadedVideo])
       }
-      setError(/nivel|destacada/.test(err.message || '')
+      setError(/video_movil_url/.test(err.message || '')
+        ? 'Falta una columna nueva: ejecuta supabase/06_video_movil.sql en el SQL Editor de Supabase.'
+        : /nivel|destacada/.test(err.message || '')
         ? 'Faltan columnas nuevas: ejecuta supabase/04_noticias_portada.sql en el SQL Editor de Supabase.'
         : /expedientes|expediente_id/.test(err.message || '')
         ? 'Falta crear los expedientes: ejecuta supabase/05_expedientes.sql en el SQL Editor de Supabase.'
@@ -331,6 +338,11 @@ function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
             </>
           )}
           {videoPreview && <video key={videoPreview} className="cal-preview" src={videoPreview} poster={coverPreview || undefined} controls preload="metadata" />}
+          <label className="field">
+            <span>Link de YouTube para celular (opcional)</span>
+            <input type="url" value={form.video_movil_url} onChange={set('video_movil_url')} placeholder="https://youtube.com/shorts/…" />
+            <span className="field-hint">Versión vertical. En celular se ve esta; en computadora, la de arriba. Si lo dejas vacío, en celular se ve la de arriba.</span>
+          </label>
           {progress !== null && (
             <div className="progress" aria-label="Progreso de subida">
               <div className="progress-bar" style={{ width: `${Math.round(progress * 100)}%` }} />

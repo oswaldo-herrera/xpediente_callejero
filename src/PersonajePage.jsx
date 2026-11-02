@@ -2,10 +2,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import './App.css'
-import { PERSONAJES, TEASER_VIDEO, TEASER_CLOSABLE, estadoLabel, youtubeId } from './data'
+import { PERSONAJES, TEASER_VIDEO, TEASER_CLOSABLE, estadoLabel, youtubeId, usaVideoMovil, DENUNCIA_ACTIVA } from './data'
 import { supabase, supabaseReady } from './lib/supabase'
 import { Btn, Icon, StatusBadge } from './components/ui'
 import TeaserIntro from './components/TeaserIntro'
+import LaunchGate from './components/LaunchGate'
 
 const fmtDate = d => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
 const isFile = url => /\.(mp4|webm|mov)(\?|$)/i.test(url || '')
@@ -26,7 +27,8 @@ function NoticiaModal({ n, onClose }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [n, onClose])
 
-  const yt = youtubeId(n?.video_url) || youtubeId(n?.link_url)
+  const vertical = usaVideoMovil(n) && youtubeId(n.video_movil_url)
+  const yt = vertical || youtubeId(n?.video_url) || youtubeId(n?.link_url)
 
   return (
     <AnimatePresence>
@@ -48,9 +50,9 @@ function NoticiaModal({ n, onClose }) {
             {n.expedientes && <span className="exp-badge">Expediente · {estadoLabel(n.expedientes.estado)}</span>}
             <h2 className="sp-modal-title">{n.title}</h2>
             {n.summary && <p className="exp-tagline exp-tagline--lg">{n.summary}</p>}
-            <div className="sp-modal-media">
-              {isFile(n.video_url) ? (
-                <video src={n.video_url} poster={n.cover_url || undefined} controls autoPlay playsInline />
+            <div className={`sp-modal-media${vertical ? ' sp-modal-media--v' : ''}`}>
+              {!vertical && isFile(n.video_url) ? (
+                <video src={n.video_url} poster={n.cover_url || undefined} controls controlsList="nodownload" onContextMenu={e => e.preventDefault()} autoPlay playsInline />
               ) : yt ? (
                 <iframe
                   src={`https://www.youtube.com/embed/${yt}`}
@@ -142,7 +144,7 @@ export default function PersonajePage() {
             <span aria-hidden>/</span>
             <span>{p.name}</span>
           </nav>
-          <Btn as="a" variant="primary" size="sm" icon="megaphone" href="/#denuncia">Denuncia</Btn>
+          {DENUNCIA_ACTIVA && <Btn as="a" variant="primary" size="sm" icon="megaphone" href="/#denuncia">Denuncia</Btn>}
         </header>
 
         <motion.section
@@ -224,6 +226,7 @@ export default function PersonajePage() {
 
       <NoticiaModal n={open} onClose={() => setOpen(null)} />
       <TeaserIntro src={TEASER_VIDEO} closable={TEASER_CLOSABLE} />
+      <LaunchGate />
     </div>
   )
 }

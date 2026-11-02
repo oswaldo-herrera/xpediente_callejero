@@ -2036,3 +2036,75 @@ body.teaser-open { overflow: hidden; }
   color: var(--red-2);
 }
 .sp-card-body .exp-badge { align-self: flex-start; margin-right: 0; }
+
+/* ── Video de bienvenida ─────────────────────────────────────────────────── */
+.welcome {
+  position: relative;
+  max-width: min(960px, 92vw);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 30px 80px -20px rgba(140, 15, 20, .8);
+}
+.welcome video { display: block; max-width: 100%; max-height: 78vh; }
+.welcome .modal-close { z-index: 2; }
+.welcome-sound {
+  position: absolute;
+  left: 50%; bottom: 64px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  font-family: var(--display);
+  font-size: 14px;
+  letter-spacing: .05em;
+  color: #fff;
+  background: var(--yellow);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.liz-card--video { grid-template-columns: minmax(0, 300px) minmax(0, 1fr) minmax(0, 360px); }
+.liz-card-video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border: 1px solid var(--line-2); border-radius: 4px; background: #000; }
+@media (max-width: 1240px) {
+  .liz-card--video { grid-template-columns: minmax(0, 260px) minmax(0, 1fr); }
+  .liz-card--video .liz-card-video { grid-column: 1 / -1; max-width: 640px; justify-self: center; }
+}
+@media (max-width: 640px) {
+  .liz-card--video { grid-template-columns: minmax(0, 1fr); }
+}
+.welcome-yt { display: block; width: min(960px, 92vw); max-width: 100%; aspect-ratio: 16 / 9; border: 0; }
+.welcome-yt--v { width: min(92vw, calc(78vh * 9 / 16)); aspect-ratio: 9 / 16; }
+.liz-card-video--v { aspect-ratio: 9 / 16; max-width: min(100%, 320px); justify-self: center; }
+.sp-modal-media--v iframe { display: block; width: min(100%, calc(70vh * 9 / 16)); aspect-ratio: 9 / 16; margin: 0 auto; border: 0; }
+
+/* Sin la tarjeta de denuncia, los indicadores llenan la fila */
+.kpis:not(:has(.kpi--alert)) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+
+/* ── Entrada de estreno ──────────────────────────────────────────────────── */
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #3a0a0d, #0a0a0a 70%);
+}
+.gate-confeti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.gate-body { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2.2vh; text-align: center; }
+.gate-logo { width: min(52vh, 78vw); height: auto; filter: drop-shadow(0 12px 40px rgba(229, 38, 43, .55)); }
+.gate-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(32px, 6.4vw, 84px);
+  font-weight: 700;
+  line-height: 1.05;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, .8);
+}
+.gate-count { margin: 0; font-family: var(--mono); font-size: clamp(22px, 3.4vw, 40px); letter-spacing: .08em; color: #FFC814; }

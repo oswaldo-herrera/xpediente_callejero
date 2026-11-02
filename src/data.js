@@ -3,6 +3,10 @@ export const SECCIONES = []
 
 export const youtubeId = url => (url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|embed\/|live\/)|studio\.youtube\.com\/video\/)([\w-]{11})/)?.[1]
 
+// En celular se prefiere el video vertical de la nota, si tiene
+export const esMovil = () => window.matchMedia('(max-width: 760px)').matches
+export const usaVideoMovil = n => Boolean(n?.video_movil_url) && esMovil()
+
 export const slugify = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -113,18 +117,28 @@ export const MUNICIPIOS_DENUNCIA = [
   ...new Set([...MUNICIPIOS.map(m => m.name), 'Otro municipio']),
 ]
 
+// Hora de estreno (centro de México): antes de esta hora el sitio muestra la entrada con confeti
+export const LANZAMIENTO = '2026-11-02T14:00:00-06:00'
+
+// Sección de denuncia ciudadana y sus botones. false = oculta por el momento
+export const DENUNCIA_ACTIVA = false
+
 // Número de WhatsApp que recibe las denuncias, con lada de país (ej. '5215512345678').
 // Vacío: WhatsApp abre el mensaje listo y el usuario elige a quién enviarlo.
 export const WHATSAPP_NUMBER = ''
 
 // Video del teaser de entrada ("Próximamente"). Pega aquí el "Copiar link" del
 // admin (Supabase). Vacío = no se muestra la intro.
-export const TEASER_VIDEO = 'https://xysarosunlwjxhspfiql.supabase.co/storage/v1/object/public/videos/2026/11/55986082-7e6c-4c7b-ab4a-2bde70e1febf-narizio-2-caption.mp4'
+export const TEASER_VIDEO = ''
+
+// Pop-up al entrar y recuadro en la franja de Lizzet: usan el video de la nota más
+// reciente de cualquier informante (CRM). Este solo se muestra si ninguna nota tiene video.
+export const WELCOME_VIDEO = ''
 
 // En local (npm run dev) aparece la X para cerrarlo y entrar al sitio;
 // en producción (Vercel) no se puede cerrar y el sitio queda oculto detrás.
 // Sin X en ningún lado: false · con X en todos lados: true
-export const TEASER_CLOSABLE = false
+export const TEASER_CLOSABLE = import.meta.env.DEV
 
 // Cada personaje tiene su página: /personaje/<slug>
 Object.entries(PERSONAJES).forEach(([key, p]) => {

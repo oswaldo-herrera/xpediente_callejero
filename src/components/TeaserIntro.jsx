@@ -11,7 +11,7 @@ let dismissed = false
 // Intro: "PRÓXIMAMENTE" se arma y se difumina; después el teaser se repite
 // con sonido sobre la página desenfocada. Con closable=false no se puede cerrar
 // y el sitio queda bloqueado detrás del teaser.
-export default function TeaserIntro({ src, closable = true }) {
+export default function TeaserIntro({ src, closable = true, onDone }) {
   const [open, setOpenState] = useState(Boolean(src) && !dismissed)
   const setOpen = v => {
     if (!v) dismissed = true
@@ -20,6 +20,10 @@ export default function TeaserIntro({ src, closable = true }) {
   const [phase, setPhase] = useState('title') // title → video
   const [needsTap, setNeedsTap] = useState(false) // false | 'sound' | 'play'
   const videoRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) onDone?.()
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // index.html ya trae la clase para que no se vea la página al recargar

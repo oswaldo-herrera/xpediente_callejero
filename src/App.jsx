@@ -4,13 +4,15 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import {
   SECCIONES, TICKER, KPIS, MUNICIPIOS, INCIDENTES, ESTATUS,
-  PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, estadoLabel, youtubeId, WHATSAPP_NUMBER, TEASER_VIDEO, TEASER_CLOSABLE,
+  PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, estadoLabel, youtubeId, usaVideoMovil, DENUNCIA_ACTIVA, WHATSAPP_NUMBER, TEASER_VIDEO, TEASER_CLOSABLE, WELCOME_VIDEO,
 } from './data'
 import { Btn, Icon, Panel, PanelHead, Tabs, Counter, StatusBadge } from './components/ui'
 import { RankBars, Donut, TrendLine } from './components/Charts'
 import HeatMap from './components/HeatMap'
 import { supabase, supabaseReady } from './lib/supabase'
 import TeaserIntro from './components/TeaserIntro'
+import WelcomeVideo from './components/WelcomeVideo'
+import LaunchGate, { antesDelLanzamiento } from './components/LaunchGate'
 
 const NAV = [
   { id: 'inicio', label: 'Inicio', icon: 'home' },
@@ -20,7 +22,7 @@ const NAV = [
   { id: 'datos', label: 'Datos', icon: 'chart' },
   { id: 'evidencia', label: 'Evidencia aérea', icon: 'drone' },
   { id: 'denuncia', label: 'Denuncia ciudadana', icon: 'megaphone' },
-]
+].filter(n => DENUNCIA_ACTIVA || n.id !== 'denuncia')
 
 const scrollTo = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
@@ -94,9 +96,11 @@ function Sidebar({ active, open, onClose }) {
             </motion.button>
           ))}
         </nav>
-        <Btn variant="outline" icon="megaphone" block onClick={() => { scrollTo('denuncia'); onClose() }}>
-          Denuncia ciudadana
-        </Btn>
+        {DENUNCIA_ACTIVA && (
+          <Btn variant="outline" icon="megaphone" block onClick={() => { scrollTo('denuncia'); onClose() }}>
+            Denuncia ciudadana
+          </Btn>
+        )}
         <p className="side-quote">La información<br />también <em>es poder.</em></p>
       </aside>
     </>
@@ -139,7 +143,7 @@ function Header({ query, setQuery, onMenu }) {
           <span className="clock-time">{time}</span>
           <span className="clock-tz">Edo. Méx. (GMT-6)</span>
         </div>
-        <Btn variant="primary" icon="megaphone" onClick={() => scrollTo('denuncia')}>Denuncia aquí</Btn>
+        {DENUNCIA_ACTIVA && <Btn variant="primary" icon="megaphone" onClick={() => scrollTo('denuncia')}>Denuncia aquí</Btn>}
       </div>
     </header>
   )
@@ -220,7 +224,7 @@ function Kpis() {
           </div>
         </motion.div>
       ))}
-      <motion.div
+      {DENUNCIA_ACTIVA && <motion.div
         className="kpi kpi--alert"
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -236,7 +240,7 @@ function Kpis() {
         <Btn variant="danger" size="sm" iconRight="arrow" block onClick={() => scrollTo('denuncia')}>
           Denunciar ahora
         </Btn>
-      </motion.div>
+      </motion.div>}
     </div>
   )
 }
@@ -470,12 +474,39 @@ function Manifiesto() {
   )
 }
 
-function PerfilCard({ who, img, imgPos, role, tag, reverse }) {
+// Video de la nota más reciente, sea de quien sea; undefined mientras carga
+function useUltimoVideo() {
+  const [video, setVideo] = useState(supabaseReady ? {} : { url: WELCOME_VIDEO })
+  useEffect(() => {
+    if (!supabaseReady) return
+    supabase
+      .from('noticias')
+      .select('video_url, link_url, video_movil_url')
+      .eq('published', true)
+      .lte('published_at', new Date().toISOString())
+      .or('video_url.not.is.null,link_url.not.is.null,video_movil_url.not.is.null')
+      .order('published_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        // Solo sirven los que se pueden reproducir aquí: YouTube o un archivo de video
+        const sirve = url => youtubeId(url) || /\.(mp4|webm|mov)(\?|$)/i.test(url || '')
+        for (const n of data || []) {
+          if (usaVideoMovil(n) && sirve(n.video_movil_url)) return setVideo({ url: n.video_movil_url, vertical: true })
+          const url = [n.video_url, n.link_url].find(sirve)
+          if (url) return setVideo({ url })
+        }
+        setVideo({ url: WELCOME_VIDEO })
+      })
+  }, [])
+  return video
+}
+
+function PerfilCard({ who, img, imgPos, role, tag, reverse, video, vertical }) {
   const navigate = useNavigate()
   const p = PERSONAJES[who]
   return (
     <Panel className="panel--perfil">
-      <div className={`liz-card${reverse ? ' liz-card--rev' : ''}`}>
+      <div className={`liz-card${reverse ? ' liz-card--rev' : ''}${video ? ' liz-card--video' : ''}`}>
         <img className="liz-card-img" src={img} alt={p.name} loading="lazy" style={imgPos ? { objectPosition: imgPos } : undefined} />
         <div className="liz-card-body">
           <h3 className="liz-card-name">{p.name}</h3>
@@ -486,6 +517,17 @@ function PerfilCard({ who, img, imgPos, role, tag, reverse }) {
             Ver todos
           </Btn>
         </div>
+        {video && (youtubeId(video) ? (
+          <iframe
+            className={`liz-card-video${vertical ? ' liz-card-video--v' : ''}`}
+            src={`https://www.youtube.com/embed/${youtubeId(video)}?rel=0`}
+            title="Video de bienvenida"
+            allow="encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <video key={video} className="liz-card-video" src={video} controls controlsList="nodownload" onContextMenu={e => e.preventDefault()} playsInline preload="metadata" aria-label="Video de bienvenida" />
+        ))}
       </div>
     </Panel>
   )
@@ -1001,6 +1043,8 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState(false)
   const [openSec, setOpenSec] = useState(null)
+  const [teaserDone, setTeaserDone] = useState(false)
+  const ultimoVideo = useUltimoVideo()
   const active = useScrollSpy(SPY_IDS)
   const closeSec = useCallback(() => setOpenSec(null), [])
 
@@ -1028,7 +1072,7 @@ export default function App() {
         {/* Última hora oculta por el momento: <Ticker /> */}
         <main className="content">
           <Manifiesto />
-          <PerfilCard who="lizzet" img="/lizzet_a.png" role="Periodista y abogada" tag="Periodismo local: desde el aire lo vemos, pero al ras de calle lo entendemos." />
+          <PerfilCard who="lizzet" img="/lizzet_a.png" role="Periodista y abogada" tag="Periodismo local: desde el aire lo vemos, pero al ras de calle lo entendemos." video={ultimoVideo.url} vertical={ultimoVideo.vertical} />
           <PerfilCard who="narizio" reverse img={PERSONAJES.narizio.img} imgPos="center 22%" role="Presentador de Xpediente Callejero" />
           <FeaturedRow />
           <Expedientes query={query} setQuery={setQuery} cat={cat} setCat={setCat} />
@@ -1036,12 +1080,14 @@ export default function App() {
           <MapRow />
           <DataRow />
           <EvidenceRow />
-          <Denuncia />
+          {DENUNCIA_ACTIVA && <Denuncia />}
         </main>
         <Footer onGo={goToCat} />
       </div>
       {/* Botón flotante de WhatsApp oculto por el momento: <WhatsAppFab /> */}
-      <TeaserIntro src={TEASER_VIDEO} closable={TEASER_CLOSABLE} />
+      <TeaserIntro src={TEASER_VIDEO} closable={TEASER_CLOSABLE} onDone={() => setTeaserDone(true)} />
+      <WelcomeVideo src={ultimoVideo.url} vertical={ultimoVideo.vertical} ready={teaserDone && !antesDelLanzamiento()} />
+      <LaunchGate />
       <ExpedienteModal sec={openSec} onClose={closeSec} />
     </div>
   )
