@@ -109,8 +109,8 @@ export const PERSONAJES = {
 
 // Paneles de la portada que se llenan con las notas de ciertos personajes
 export const PANELES_PORTADA = {
-  evidencia: { title: 'Evidencia aérea', personajes: ['narizio'] },
-  voces: { title: 'La voz de la banqueta', personajes: ['donaPelos', 'elVrayan'] },
+  evidencia: { title: 'Evidencia aérea', personajes: ['misteriozo'] },
+  voces: { title: 'La voz de la banqueta', personajes: ['donaPelos'] },
 }
 
 export const MUNICIPIOS_DENUNCIA = [
@@ -119,6 +119,9 @@ export const MUNICIPIOS_DENUNCIA = [
 
 // Hora de estreno (centro de México): antes de esta hora el sitio muestra la entrada con confeti
 export const LANZAMIENTO = '2026-11-02T14:00:00-06:00'
+
+// Pop-up de bienvenida con video al entrar. false = oculto (el recuadro de la portada sigue)
+export const POPUP_ACTIVO = false
 
 // Sección de denuncia ciudadana y sus botones. false = oculta por el momento
 export const DENUNCIA_ACTIVA = false

@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import {
   SECCIONES, TICKER, KPIS, MUNICIPIOS, INCIDENTES, ESTATUS,
-  PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, estadoLabel, youtubeId, usaVideoMovil, DENUNCIA_ACTIVA, WHATSAPP_NUMBER, TEASER_VIDEO, TEASER_CLOSABLE, WELCOME_VIDEO,
+  PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, estadoLabel, youtubeId, usaVideoMovil, DENUNCIA_ACTIVA, POPUP_ACTIVO, WHATSAPP_NUMBER, TEASER_VIDEO, TEASER_CLOSABLE, WELCOME_VIDEO,
 } from './data'
 import { Btn, Icon, Panel, PanelHead, Tabs, Counter, StatusBadge } from './components/ui'
 import { RankBars, Donut, TrendLine } from './components/Charts'
@@ -1111,7 +1111,7 @@ export default function App() {
       </div>
       {/* Botón flotante de WhatsApp oculto por el momento: <WhatsAppFab /> */}
       <TeaserIntro src={TEASER_VIDEO} closable={TEASER_CLOSABLE} onDone={() => setTeaserDone(true)} />
-      <WelcomeVideo src={ultimoVideo.url} vertical={ultimoVideo.vertical} ready={teaserDone && !antesDelLanzamiento()} />
+      {POPUP_ACTIVO && <WelcomeVideo src={ultimoVideo.url} vertical={ultimoVideo.vertical} ready={teaserDone && !antesDelLanzamiento()} />}
       <LaunchGate />
       <ExpedienteModal sec={openSec} onClose={closeSec} />
     </div>
