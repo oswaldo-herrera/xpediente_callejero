@@ -837,7 +837,7 @@ function EvidenceRow() {
 
 // ─── Denuncia ciudadana ──────────────────────────────────────────────────────
 
-function Denuncia() {
+export function Denuncia() {
   const [form, setForm] = useState({ municipio: '', tipo: '', desc: '', nombre: '', anonimo: true, coords: '' })
   const [geo, setGeo] = useState('idle')
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))

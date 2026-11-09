@@ -128,7 +128,7 @@ export const DENUNCIA_ACTIVA = false
 
 // Número de WhatsApp que recibe las denuncias, con lada de país (ej. '5215512345678').
 // Vacío: WhatsApp abre el mensaje listo y el usuario elige a quién enviarlo.
-export const WHATSAPP_NUMBER = ''
+export const WHATSAPP_NUMBER = '525569623167'
 
 // Video del teaser de entrada ("Próximamente"). Pega aquí el "Copiar link" del
 // admin (Supabase). Vacío = no se muestra la intro.
