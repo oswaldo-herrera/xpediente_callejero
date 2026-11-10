@@ -474,21 +474,21 @@ function Manifiesto() {
   )
 }
 
-// Video de la nota fijada en el CRM o, si no hay, de la más reciente; vacío mientras carga
-function useUltimoVideo() {
+// Con `personaje`: video de su nota más reciente. Sin él: el de la nota fijada en el CRM
+// o, si no hay, el de la más reciente de cualquiera. Vacío mientras carga.
+function useUltimoVideo(personaje) {
   const [video, setVideo] = useState(supabaseReady ? {} : { url: WELCOME_VIDEO })
   useEffect(() => {
     if (!supabaseReady) return
-    supabase
+    let q = supabase
       .from('noticias')
       .select('video_url, link_url, video_movil_url')
       .eq('published', true)
       .lte('published_at', new Date().toISOString())
       .or('video_url.not.is.null,link_url.not.is.null,video_movil_url.not.is.null')
-      .order('destacada', { ascending: false })
-      .order('published_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
+    q = personaje ? q.eq('personaje', personaje) : q.order('destacada', { ascending: false })
+    q = q.order('published_at', { ascending: false }).limit(20)
+    q.then(({ data }) => {
         // Solo sirven los que se pueden reproducir aquí: YouTube o un archivo de video
         const sirve = url => youtubeId(url) || /\.(mp4|webm|mov)(\?|$)/i.test(url || '')
         for (const n of data || []) {
@@ -498,7 +498,7 @@ function useUltimoVideo() {
         }
         setVideo({ url: WELCOME_VIDEO })
       })
-  }, [])
+  }, [personaje])
   return video
 }
 
@@ -1070,6 +1070,7 @@ export default function App() {
   const [openSec, setOpenSec] = useState(null)
   const [teaserDone, setTeaserDone] = useState(false)
   const ultimoVideo = useUltimoVideo()
+  const videoLizzet = useUltimoVideo('lizzet')
   const active = useScrollSpy(SPY_IDS)
   const closeSec = useCallback(() => setOpenSec(null), [])
 
@@ -1097,7 +1098,7 @@ export default function App() {
         {/* Última hora oculta por el momento: <Ticker /> */}
         <main className="content">
           <Manifiesto />
-          <PerfilCard who="lizzet" img="/lizzet_a.png" role="Periodista y abogada" tag="Periodismo local: desde el aire lo vemos, pero al ras de calle lo entendemos." video={ultimoVideo.url} vertical={ultimoVideo.vertical} />
+          <PerfilCard who="lizzet" img="/lizzet_a.png" role="Periodista y abogada" tag="Periodismo local: desde el aire lo vemos, pero al ras de calle lo entendemos." video={videoLizzet.url} vertical={videoLizzet.vertical} />
           <PerfilCard who="narizio" reverse img={PERSONAJES.narizio.img} imgPos="center 22%" role="Presentador de Xpediente Callejero" />
           <FeaturedRow />
           <Expedientes query={query} setQuery={setQuery} cat={cat} setCat={setCat} />
