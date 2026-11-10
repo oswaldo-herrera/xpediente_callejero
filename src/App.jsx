@@ -837,9 +837,17 @@ function EvidenceRow() {
 
 // ─── Denuncia ciudadana ──────────────────────────────────────────────────────
 
+const ADJ_BUCKET = 'denuncias'
+const ADJ_TIPOS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
+const ADJ_MAX_MB = 10
+const ADJ_MAX = 3
+
 export function Denuncia() {
   const [form, setForm] = useState({ municipio: '', tipo: '', desc: '', nombre: '', anonimo: true, coords: '' })
   const [geo, setGeo] = useState('idle')
+  // Cada archivo se sube al elegirlo; el mensaje de WhatsApp lleva su enlace
+  const [adjuntos, setAdjuntos] = useState([]) // { id, name, status: 'subiendo' | 'ok' | 'error', url, error }
+  const subiendo = adjuntos.some(a => a.status === 'subiendo')
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
   const locate = () => {
@@ -852,8 +860,32 @@ export function Denuncia() {
     )
   }
 
+  const agregar = async files => {
+    const lista = [...files].slice(0, ADJ_MAX - adjuntos.length)
+    for (const f of lista) {
+      const id = crypto.randomUUID()
+      const error = !ADJ_TIPOS.includes(f.type) ? 'Solo fotos (JPG, PNG, WebP) o PDF.'
+        : f.size > ADJ_MAX_MB * 1024 * 1024 ? `Pesa más de ${ADJ_MAX_MB} MB.` : ''
+      setAdjuntos(a => [...a, { id, name: f.name, status: error ? 'error' : 'subiendo', error }])
+      if (error) continue
+      const now = new Date()
+      const ext = (f.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '')
+      const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${id}.${ext}`
+      const { error: upErr } = supabase
+        ? await supabase.storage.from(ADJ_BUCKET).upload(path, f, { contentType: f.type })
+        : { error: new Error('sin conexión') }
+      setAdjuntos(a => a.map(x => x.id !== id ? x : upErr
+        ? { ...x, status: 'error', error: 'No se pudo subir. Intenta de nuevo.' }
+        : { ...x, status: 'ok', url: supabase.storage.from(ADJ_BUCKET).getPublicUrl(path).data.publicUrl }))
+    }
+  }
+
+  const quitar = id => setAdjuntos(a => a.filter(x => x.id !== id))
+
   const submit = e => {
     e.preventDefault()
+    if (subiendo) return
+    const listos = adjuntos.filter(a => a.status === 'ok')
     const text = [
       '*DENUNCIA CIUDADANA · Xpediente Callejero*',
       '',
@@ -863,6 +895,8 @@ export function Denuncia() {
       '',
       form.desc,
       '',
+      listos.length ? `*Archivos:*\n${listos.map(a => a.url).join('\n')}` : null,
+      listos.length ? '' : null,
       form.anonimo ? '_Denuncia anónima._' : `*Nombre / contacto:* ${form.nombre}`,
     ].filter(l => l !== null).join('\n')
     // Sin número configurado, WhatsApp deja elegir a quién enviarlo
@@ -904,6 +938,27 @@ export function Denuncia() {
           <span>¿Qué está pasando?</span>
           <textarea required rows={4} value={form.desc} onChange={set('desc')} placeholder="Describe el problema, la calle o colonia y desde cuándo ocurre." />
         </label>
+        <div className="field field--full">
+          <span>Fotos o PDF (opcional)</span>
+          {adjuntos.length < ADJ_MAX && (
+            <label className="btn btn--ghost btn--sm den-file">
+              <Icon name="camera" size={14} /> Agregar foto o PDF
+              <input type="file" accept={ADJ_TIPOS.join(',')} multiple hidden onChange={e => { agregar(e.target.files); e.target.value = '' }} />
+            </label>
+          )}
+          {adjuntos.length > 0 && (
+            <ul className="den-adj">
+              {adjuntos.map(a => (
+                <li key={a.id} className={`den-adj-item den-adj-item--${a.status}`}>
+                  <span className="den-adj-name">{a.name}</span>
+                  <span className="den-adj-state">{a.status === 'subiendo' ? 'Subiendo…' : a.status === 'ok' ? 'Listo' : a.error}</span>
+                  <button type="button" className="den-adj-x" onClick={() => quitar(a.id)} aria-label={`Quitar ${a.name}`}><Icon name="close" size={14} /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <span className="field-hint">Hasta {ADJ_MAX} archivos de {ADJ_MAX_MB} MB. Se envían como enlace en tu mensaje.</span>
+        </div>
         <div className="field field--full field--row">
           <Btn type="button" variant="ghost" size="sm" icon="gps" onClick={locate}>
             {geo === 'loading' ? 'Ubicando…' : geo === 'ok' ? 'Ubicación agregada' : 'Usar mi ubicación'}
@@ -923,10 +978,10 @@ export function Denuncia() {
             <input value={form.nombre} onChange={set('nombre')} placeholder="Nombre, teléfono o correo" />
           </label>
         )}
-        <Btn type="submit" variant="primary" icon="megaphone" iconRight="arrow" block className="field--full">
-          Realizar denuncia
+        <Btn type="submit" variant="primary" icon="megaphone" iconRight="arrow" block className="field--full" disabled={subiendo}>
+          {subiendo ? 'Subiendo archivos…' : 'Realizar denuncia'}
         </Btn>
-        <p className="field-hint field--full">Se abrirá WhatsApp con tu denuncia lista para enviar; ahí puedes adjuntar fotos o video.</p>
+        <p className="field-hint field--full">Se abrirá WhatsApp con tu denuncia y los enlaces de tus archivos; también puedes adjuntar video ahí.</p>
       </form>
     </Panel>
   )
