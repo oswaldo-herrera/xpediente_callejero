@@ -2121,3 +2121,15 @@ body.teaser-open { overflow: hidden; }
   text-shadow: 0 4px 24px rgba(0, 0, 0, .8);
 }
 .gate-count { margin: 0; font-family: var(--mono); font-size: clamp(22px, 3.4vw, 40px); letter-spacing: .08em; color: #FFC814; }
+
+/* Formulario de denuncia: todo el texto en blanco para que se lea nítido */
+.panel--denuncia .den-intro p,
+.panel--denuncia .den-steps li,
+.panel--denuncia .field > span:first-child,
+.panel--denuncia .field-hint,
+.panel--denuncia .check,
+.panel--denuncia select,
+.panel--denuncia textarea,
+.panel--denuncia input { color: #fff; }
+.panel--denuncia textarea::placeholder,
+.panel--denuncia input::placeholder { color: rgba(255, 255, 255, .7); }
