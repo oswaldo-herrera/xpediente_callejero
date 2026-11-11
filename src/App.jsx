@@ -13,6 +13,7 @@ import { supabase, supabaseReady } from './lib/supabase'
 import TeaserIntro from './components/TeaserIntro'
 import WelcomeVideo from './components/WelcomeVideo'
 import LaunchGate, { antesDelLanzamiento } from './components/LaunchGate'
+import CamaraFoto, { camaraDisponible } from './components/CamaraFoto'
 
 const NAV = [
   { id: 'inicio', label: 'Inicio', icon: 'home' },
@@ -872,6 +873,7 @@ export function Denuncia() {
     guardarBorrador({ form, adjuntos: adjuntos.filter(a => a.status === 'ok') })
   }, [form, adjuntos])
   const subiendo = adjuntos.some(a => a.status === 'subiendo')
+  const [camara, setCamara] = useState(false)
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
   const locate = () => {
@@ -967,9 +969,12 @@ export function Denuncia() {
           <span>Fotos o PDF (opcional)</span>
           {adjuntos.length < ADJ_MAX && (
             <div className="den-files">
+              {camaraDisponible() && (
+                <Btn type="button" variant="ghost" size="sm" icon="camera" onClick={() => setCamara(true)}>Tomar foto</Btn>
+              )}
               {/* Solo "image/*": en Android abre el selector de fotos, más ligero que el de archivos */}
               <label className="btn btn--ghost btn--sm den-file">
-                <Icon name="camera" size={14} /> Agregar foto
+                <Icon name="layers" size={14} /> Agregar foto
                 <input type="file" accept="image/*" multiple hidden onChange={e => { agregar(e.target.files); e.target.value = '' }} />
               </label>
               <label className="btn btn--ghost btn--sm den-file">
@@ -990,7 +995,7 @@ export function Denuncia() {
             </ul>
           )}
           <span className="field-hint">Hasta {ADJ_MAX} archivos de {ADJ_MAX_MB} MB. Se envían como enlace en tu mensaje.</span>
-          <span className="field-hint">En celular, toma la foto primero con tu cámara y luego elígela desde la galería.</span>
+          {camara && <CamaraFoto onFoto={f => agregar([f])} onClose={() => setCamara(false)} />}
         </div>
         <div className="field field--full field--row">
           <Btn type="button" variant="ghost" size="sm" icon="gps" onClick={locate}>
