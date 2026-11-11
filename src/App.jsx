@@ -939,12 +939,7 @@ export function Denuncia() {
           <h2 className="den-title">Denuncia ciudadana</h2>
           <p>Tu denuncia puede generar un cambio. Cuéntanos qué sucede, dónde y desde cuándo. Nosotros abrimos el expediente.</p>
         </div>
-        <ul className="den-steps">
-          <li><Icon name="camera" size={20} />Fotos o video</li>
-          <li><Icon name="gps" size={20} />Ubicación GPS</li>
-          <li><Icon name="doc" size={20} />Descripción</li>
-          <li><Icon name="mask" size={20} />Anónimo</li>
-        </ul>
+        <img className="den-sello" src="/logos/LOGO%20SELLO%20BLANCO.png" alt="Sello de Xpediente Callejero" />
       </div>
       <form className="den-form" onSubmit={submit}>
         <label className="field">

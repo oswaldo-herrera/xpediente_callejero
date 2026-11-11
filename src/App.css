@@ -1216,6 +1216,7 @@ a { color: inherit; }
   color: #fff;
   box-shadow: 0 0 30px rgba(140, 15, 20,.4);
 }
+.den-sello { display: block; width: min(260px, 70%); height: auto; margin: 8px auto 0; opacity: .95; }
 .den-title { margin: 0 0 6px; font-family: var(--display); font-size: 30px; text-transform: uppercase; letter-spacing: .03em; }
 .den-intro p { margin: 0; color: var(--ink-2); font-size: 15px; }
 .den-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
