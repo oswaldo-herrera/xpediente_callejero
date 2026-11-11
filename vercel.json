@@ -1,4 +1,11 @@
 {
   "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/f/:archivo",
+      "destination": "https://xysarosunlwjxhspfiql.supabase.co/storage/v1/object/public/denuncias/:archivo",
+      "permanent": false
+    }
+  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/" }]
 }

@@ -839,14 +839,38 @@ function EvidenceRow() {
 
 const ADJ_BUCKET = 'denuncias'
 const ADJ_TIPOS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
+// Algunos celulares entregan el archivo sin tipo: se deduce por la extensión
+const TIPO_POR_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf' }
+// Nombre corto para el enlace (no usa crypto.randomUUID, que solo existe en https)
+const nuevoId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+// El enlace usa el dominio propio: vercel.json redirige /f/<archivo> al bucket de Supabase
+const enlaceCorto = path => `https://www.xpedientecallejero.com/f/${path}`
+const tipoDe = f => (ADJ_TIPOS.includes(f.type) ? f.type : TIPO_POR_EXT[(f.name.split('.').pop() || '').toLowerCase()]) || ''
 const ADJ_MAX_MB = 10
 const ADJ_MAX = 3
+const BORRADOR_KEY = 'xc-denuncia-borrador'
+const FORM_VACIO = { municipio: '', tipo: '', desc: '', nombre: '', anonimo: true, coords: '' }
+
+// Algunos Android cierran la pestaña al abrir la cámara y la página vuelve a cargar:
+// el borrador guarda lo escrito y los archivos ya subidos para recuperarlos.
+const leerBorrador = () => {
+  try { return JSON.parse(sessionStorage.getItem(BORRADOR_KEY)) || null } catch { return null }
+}
+const guardarBorrador = b => {
+  try { sessionStorage.setItem(BORRADOR_KEY, JSON.stringify(b)) } catch { /* sin almacenamiento */ }
+}
+const borrarBorrador = () => {
+  try { sessionStorage.removeItem(BORRADOR_KEY) } catch { /* sin almacenamiento */ }
+}
 
 export function Denuncia() {
-  const [form, setForm] = useState({ municipio: '', tipo: '', desc: '', nombre: '', anonimo: true, coords: '' })
+  const [form, setForm] = useState(() => ({ ...FORM_VACIO, ...leerBorrador()?.form }))
   const [geo, setGeo] = useState('idle')
   // Cada archivo se sube al elegirlo; el mensaje de WhatsApp lleva su enlace
-  const [adjuntos, setAdjuntos] = useState([]) // { id, name, status: 'subiendo' | 'ok' | 'error', url, error }
+  const [adjuntos, setAdjuntos] = useState(() => leerBorrador()?.adjuntos || []) // { id, name, status: 'subiendo' | 'ok' | 'error', url, error }
+  useEffect(() => {
+    guardarBorrador({ form, adjuntos: adjuntos.filter(a => a.status === 'ok') })
+  }, [form, adjuntos])
   const subiendo = adjuntos.some(a => a.status === 'subiendo')
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
@@ -863,20 +887,20 @@ export function Denuncia() {
   const agregar = async files => {
     const lista = [...files].slice(0, ADJ_MAX - adjuntos.length)
     for (const f of lista) {
-      const id = crypto.randomUUID()
-      const error = !ADJ_TIPOS.includes(f.type) ? 'Solo fotos (JPG, PNG, WebP) o PDF.'
+      const id = nuevoId()
+      const tipo = tipoDe(f)
+      const error = !tipo ? 'Solo fotos (JPG, PNG, WebP) o PDF.'
         : f.size > ADJ_MAX_MB * 1024 * 1024 ? `Pesa más de ${ADJ_MAX_MB} MB.` : ''
       setAdjuntos(a => [...a, { id, name: f.name, status: error ? 'error' : 'subiendo', error }])
       if (error) continue
-      const now = new Date()
-      const ext = (f.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '')
-      const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${id}.${ext}`
+      const ext = Object.keys(TIPO_POR_EXT).find(k => TIPO_POR_EXT[k] === tipo && k !== 'jpeg') || 'bin'
+      const path = `${id}.${ext}`
       const { error: upErr } = supabase
-        ? await supabase.storage.from(ADJ_BUCKET).upload(path, f, { contentType: f.type })
+        ? await supabase.storage.from(ADJ_BUCKET).upload(path, f, { contentType: tipo })
         : { error: new Error('sin conexión') }
       setAdjuntos(a => a.map(x => x.id !== id ? x : upErr
         ? { ...x, status: 'error', error: 'No se pudo subir. Intenta de nuevo.' }
-        : { ...x, status: 'ok', url: supabase.storage.from(ADJ_BUCKET).getPublicUrl(path).data.publicUrl }))
+        : { ...x, status: 'ok', url: enlaceCorto(path), pdf: tipo === 'application/pdf' }))
     }
   }
 
@@ -895,13 +919,14 @@ export function Denuncia() {
       '',
       form.desc,
       '',
-      listos.length ? `*Archivos:*\n${listos.map(a => a.url).join('\n')}` : null,
+      listos.length ? `*Archivos:*\n${listos.map((a, i) => `${a.pdf ? '📄 PDF' : '📷 Foto'} ${i + 1}: ${a.url}`).join('\n')}` : null,
       listos.length ? '' : null,
       form.anonimo ? '_Denuncia anónima._' : `*Nombre / contacto:* ${form.nombre}`,
     ].filter(l => l !== null).join('\n')
     // Sin número configurado, WhatsApp deja elegir a quién enviarlo
     const to = WHATSAPP_NUMBER.replace(/\D/g, '')
     window.open(`https://wa.me/${to}?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
+    borrarBorrador()
   }
 
   return (
@@ -941,10 +966,17 @@ export function Denuncia() {
         <div className="field field--full">
           <span>Fotos o PDF (opcional)</span>
           {adjuntos.length < ADJ_MAX && (
-            <label className="btn btn--ghost btn--sm den-file">
-              <Icon name="camera" size={14} /> Agregar foto o PDF
-              <input type="file" accept={ADJ_TIPOS.join(',')} multiple hidden onChange={e => { agregar(e.target.files); e.target.value = '' }} />
-            </label>
+            <div className="den-files">
+              {/* Solo "image/*": en Android abre el selector de fotos, más ligero que el de archivos */}
+              <label className="btn btn--ghost btn--sm den-file">
+                <Icon name="camera" size={14} /> Agregar foto
+                <input type="file" accept="image/*" multiple hidden onChange={e => { agregar(e.target.files); e.target.value = '' }} />
+              </label>
+              <label className="btn btn--ghost btn--sm den-file">
+                <Icon name="doc" size={14} /> Agregar PDF
+                <input type="file" accept="application/pdf" hidden onChange={e => { agregar(e.target.files); e.target.value = '' }} />
+              </label>
+            </div>
           )}
           {adjuntos.length > 0 && (
             <ul className="den-adj">
@@ -958,6 +990,7 @@ export function Denuncia() {
             </ul>
           )}
           <span className="field-hint">Hasta {ADJ_MAX} archivos de {ADJ_MAX_MB} MB. Se envían como enlace en tu mensaje.</span>
+          <span className="field-hint">En celular, toma la foto primero con tu cámara y luego elígela desde la galería.</span>
         </div>
         <div className="field field--full field--row">
           <Btn type="button" variant="ghost" size="sm" icon="gps" onClick={locate}>
