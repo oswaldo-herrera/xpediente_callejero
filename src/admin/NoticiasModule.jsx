@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase, videoUrl, uploadVideoFile, VIDEO_BUCKET, MAX_VIDEO_MB, VIDEO_TYPES } from '../lib/supabase'
 import { PERSONAJES, PANELES_PORTADA, MUNICIPIOS_DENUNCIA, ESTADOS_EXPEDIENTE, CATEGORIAS_EXPEDIENTE, estadoLabel, youtubeId } from '../data'
 import { Btn, Icon, Tabs } from '../components/ui'
@@ -67,10 +68,10 @@ function Step({ n, title, hint, children }) {
 
 // ─── Formulario ──────────────────────────────────────────────────────────────
 
-function NoticiaForm({ item, videos, expedientes, onClose, onSaved }) {
+function NoticiaForm({ item, prefill, videos, expedientes, onClose, onSaved }) {
   const [form, setForm] = useState(() => item
     ? { ...EMPTY(), ...Object.fromEntries(Object.entries(item).map(([k, v]) => [k, v ?? ''])), published_at: toLocalInput(new Date(item.published_at)) }
-    : EMPTY())
+    : { ...EMPTY(), ...prefill })
   const [expModo, setExpModo] = useState(item?.expediente_id ? 'existente' : 'no')
   const [expNuevo, setExpNuevo] = useState({ estado: 'abierto', categoria: '' })
   const [cover, setCover] = useState(null) // imagen inicial nueva (archivo)
@@ -445,7 +446,16 @@ export default function NoticiasModule() {
   const [expedientes, setExpedientes] = useState([])
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('todos')
-  const [modal, setModal] = useState(null) // { item? }
+  const [modal, setModal] = useState(null) // { item?, prefill? }
+  const { state } = useLocation()
+  const navigate = useNavigate()
+
+  // Desde Monitoreo: abre una noticia nueva con el municipio y la fuente ya puestos
+  useEffect(() => {
+    if (!state?.prefill) return
+    setModal({ prefill: state.prefill })
+    navigate('.', { replace: true, state: null })
+  }, [state, navigate])
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('noticias').select('*').order('published_at', { ascending: false })
@@ -580,6 +590,7 @@ export default function NoticiasModule() {
               <button className="modal-close" onClick={() => setModal(null)} aria-label="Cerrar"><Icon name="close" /></button>
               <NoticiaForm
                 item={modal.item}
+                prefill={modal.prefill}
                 videos={videos}
                 expedientes={expedientes}
                 onClose={() => setModal(null)}

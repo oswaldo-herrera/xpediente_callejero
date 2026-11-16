@@ -7,5 +7,15 @@
       "permanent": false
     }
   ],
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/"
+    }
+  ],
+  "functions": {
+    "api/monitoreo.js": {
+      "maxDuration": 30
+    }
+  }
 }

@@ -9,6 +9,8 @@ import VideosModule from './VideosModule'
 import CalendarModule from './CalendarModule'
 import NoticiasModule from './NoticiasModule'
 import ExpedientesModule from './ExpedientesModule'
+import MonitoreoModule from './MonitoreoModule'
+import UsuariosModule from './UsuariosModule'
 
 // ─── Sesión ──────────────────────────────────────────────────────────────────
 
@@ -22,19 +24,24 @@ function useSession() {
   return session
 }
 
-function useIsAdmin(session) {
-  const [state, setState] = useState('loading')
+// Rol de la cuenta: 'admin' (tabla admins), 'periodista' (tabla equipo),
+// 'none' (sin acceso), 'error' o 'loading'
+function useRol(session) {
+  const [rol, setRol] = useState('loading')
   useEffect(() => {
     if (!session) return
-    setState('loading')
-    supabase
-      .from('admins')
-      .select('user_id')
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => setState(error ? 'error' : data ? 'yes' : 'no'))
+    setRol('loading')
+    const id = session.user.id
+    supabase.from('admins').select('user_id').eq('user_id', id).maybeSingle()
+      .then(async ({ data, error }) => {
+        if (error) return setRol('error')
+        if (data) return setRol('admin')
+        // Sin 09_roles.sql la tabla equipo no existe: se trata como sin acceso
+        const { data: miembro } = await supabase.from('equipo').select('rol').eq('user_id', id).maybeSingle()
+        setRol(miembro?.rol || 'none')
+      })
   }, [session])
-  return state
+  return rol
 }
 
 // ─── Pantallas ───────────────────────────────────────────────────────────────
@@ -88,7 +95,7 @@ function Login() {
   return (
     <Shell>
       <h1 className="adm-h1">Panel de administración</h1>
-      <p className="adm-p">Ingresa con tu cuenta de administrador.</p>
+      <p className="adm-p">Ingresa con tu cuenta del equipo.</p>
       <form className="adm-form" onSubmit={submit}>
         <label className="field">
           <span>Correo</span>
@@ -111,11 +118,11 @@ function Login() {
 function NoAccess({ email, state }) {
   return (
     <Shell>
-      <h1 className="adm-h1">{state === 'error' ? 'No se pudo verificar el acceso' : 'Sin permisos de administrador'}</h1>
+      <h1 className="adm-h1">{state === 'error' ? 'No se pudo verificar el acceso' : 'Sin acceso al panel'}</h1>
       <p className="adm-p">
         {state === 'error'
           ? 'Revisa que ejecutaste supabase/schema.sql en tu proyecto.'
-          : <>La cuenta <strong>{email}</strong> no está registrada como administradora.</>}
+          : <>La cuenta <strong>{email}</strong> no tiene permisos en el panel. Pide a un administrador que te dé acceso.</>}
       </p>
       <Btn variant="ghost" icon="close" block onClick={() => supabase.auth.signOut()}>Cerrar sesión</Btn>
     </Shell>
@@ -125,22 +132,32 @@ function NoAccess({ email, state }) {
 // ─── Layout del admin ────────────────────────────────────────────────────────
 
 const MODULES = [
-  { to: 'videos', label: 'Videos', icon: 'play' },
-  { to: 'noticias', label: 'Noticias', icon: 'doc' },
-  { to: 'expedientes', label: 'Expedientes', icon: 'folder' },
-  { to: 'calendario', label: 'Calendario', icon: 'clock' },
+  { to: 'videos', label: 'Videos', icon: 'play', element: <VideosModule /> },
+  { to: 'noticias', label: 'Noticias', icon: 'doc', element: <NoticiasModule /> },
+  { to: 'expedientes', label: 'Expedientes', icon: 'folder', element: <ExpedientesModule /> },
+  { to: 'monitoreo', label: 'Monitoreo', icon: 'search' },
+  { to: 'calendario', label: 'Calendario', icon: 'clock', element: <CalendarModule /> },
   { label: 'Denuncias', icon: 'megaphone', soon: true },
-  { label: 'Usuarios', icon: 'users', soon: true },
+  { to: 'usuarios', label: 'Usuarios', icon: 'users', element: <UsuariosModule /> },
 ]
 
-function Layout({ session }) {
+// Qué módulos ve cada rol (el admin ve todos)
+const VISTAS = {
+  periodista: ['monitoreo'],
+}
+const puedeVer = (rol, m) => rol === 'admin' || (!m.soon && VISTAS[rol]?.includes(m.to))
+const TITULO_ROL = { admin: 'Admin', periodista: 'Periodista' }
+
+function Layout({ session, rol }) {
+  const modulos = MODULES.filter(m => puedeVer(rol, m))
+  const inicio = modulos.find(m => !m.soon)?.to || 'monitoreo'
   return (
     <div className="adm">
       <aside className="adm-side">
         <span className="stamp adm-side-logo" role="img" aria-label="Xpediente Callejero" />
-        <p className="adm-side-title">Admin</p>
+        <p className="adm-side-title">{TITULO_ROL[rol] || 'Admin'}</p>
         <nav className="adm-nav">
-          {MODULES.map(m => m.soon ? (
+          {modulos.map(m => m.soon ? (
             <span key={m.label} className="adm-link adm-link--soon">
               <Icon name={m.icon} size={17} />{m.label}<em>Pronto</em>
             </span>
@@ -158,12 +175,11 @@ function Layout({ session }) {
       </aside>
       <main className="adm-main">
         <Routes>
-          <Route index element={<Navigate to="videos" replace />} />
-          <Route path="videos" element={<VideosModule />} />
-          <Route path="noticias" element={<NoticiasModule />} />
-          <Route path="expedientes" element={<ExpedientesModule />} />
-          <Route path="calendario" element={<CalendarModule />} />
-          <Route path="*" element={<Navigate to="videos" replace />} />
+          <Route index element={<Navigate to={inicio} replace />} />
+          {modulos.filter(m => !m.soon).map(m => (
+            <Route key={m.to} path={m.to} element={m.to === 'monitoreo' ? <MonitoreoModule puedeCrear={rol === 'admin'} /> : m.element} />
+          ))}
+          <Route path="*" element={<Navigate to={inicio} replace />} />
         </Routes>
       </main>
     </div>
@@ -174,12 +190,12 @@ function Layout({ session }) {
 
 function Gate() {
   const session = useSession()
-  const isAdmin = useIsAdmin(session)
+  const rol = useRol(session)
   if (session === undefined) return null
   if (!session) return <Login />
-  if (isAdmin === 'loading') return null
-  if (isAdmin !== 'yes') return <NoAccess email={session.user.email} state={isAdmin} />
-  return <Layout session={session} />
+  if (rol === 'loading') return null
+  if (rol === 'none' || rol === 'error') return <NoAccess email={session.user.email} state={rol} />
+  return <Layout session={session} rol={rol} />
 }
 
 export default function AdminApp() {
