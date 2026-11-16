@@ -132,6 +132,7 @@ export default function UsuariosModule() {
       {faltaLlave ? (
         <section className="adm-panel">
           <h2 className="adm-h2"><Icon name="shield" size={18} /> Falta un paso de configuración</h2>
+          {error && <p className="adm-error">{error}</p>}
           <p className="adm-p">Para crear usuarios, el servidor necesita la llave <strong>service_role</strong> de Supabase (Project Settings → API). Nunca la pegues en el código ni en un chat:</p>
           <ol className="adm-steps">
             <li><strong>En local:</strong> agrégala a <code>.env.local</code> como <code>SUPABASE_SERVICE_ROLE_KEY=…</code> y reinicia el servidor.</li>

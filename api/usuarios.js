@@ -45,6 +45,11 @@ export default async function handler(req, res) {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
   const llave = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !llave) return responder(res, 500, { error: 'falta_llave', mensaje: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor.' })
+  // Error común: pegar la llave pública (publishable / anon) en lugar de la secreta
+  const rolJwt = (() => { try { return JSON.parse(Buffer.from(llave.split('.')[1], 'base64url')).role } catch { return null } })()
+  if (llave.startsWith('sb_publishable_') || rolJwt === 'anon' || llave === process.env.VITE_SUPABASE_ANON_KEY) {
+    return responder(res, 500, { error: 'falta_llave', mensaje: 'SUPABASE_SERVICE_ROLE_KEY tiene la llave pública (publishable). Debe ser la secreta (sb_secret_… o service_role).' })
+  }
 
   const db = createClient(url, llave, { auth: { persistSession: false, autoRefreshToken: false } })
 
