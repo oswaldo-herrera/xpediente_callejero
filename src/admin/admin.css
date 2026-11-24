@@ -684,3 +684,6 @@
 .usr-pass-form .cal-input { flex: 1; min-width: 180px; font-family: var(--mono); }
 .usr-aviso { grid-column: 1 / -1; margin: 0; color: #fff; }
 @media (max-width: 640px) { .usr-row { grid-template-columns: minmax(0, 1fr); } }
+
+.mon-vistas { margin: 0 0 16px; }
+.mon-guardada-el { color: var(--muted); }

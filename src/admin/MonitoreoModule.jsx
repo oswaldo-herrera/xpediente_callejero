@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MUNICIPIOS } from '../data'
+import { supabase } from '../lib/supabase'
 import { Btn, Icon, Tabs } from '../components/ui'
 
 // Texto sin acentos y en minúsculas para comparar
@@ -47,8 +48,74 @@ const parecido = (a, b) => {
 
 const fmt = iso => iso ? new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Sin fecha'
 
+// Notas guardadas del usuario (tabla notas_guardadas; cada quien ve solo las suyas)
+function useGuardadas() {
+  const [lista, setLista] = useState([])
+  const [error, setError] = useState('')
+  useEffect(() => {
+    supabase.from('notas_guardadas').select('*').order('created_at', { ascending: false })
+      .then(({ data, error }) => error ? setError('No se pudieron cargar tus notas guardadas. ¿Ya se ejecutó 10_notas_guardadas.sql?') : setLista(data))
+  }, [])
+  const links = useMemo(() => new Set(lista.map(g => g.link)), [lista])
+  const alternar = async n => {
+    setError('')
+    if (links.has(n.link)) {
+      const { error } = await supabase.from('notas_guardadas').delete().eq('link', n.link)
+      if (error) return setError('No se pudo quitar la nota. Intenta de nuevo.')
+      setLista(l => l.filter(g => g.link !== n.link))
+    } else {
+      const fila = { link: n.link, titulo: n.titulo, medio: n.medio, fecha: n.fecha || null, imagen: n.imagen || null, resumen: n.resumen || null, zonas: n.zonas || [] }
+      const { data, error } = await supabase.from('notas_guardadas').insert(fila).select().single()
+      if (error) return setError('No se pudo guardar la nota. Intenta de nuevo.')
+      setLista(l => [data, ...l])
+    }
+  }
+  return { lista, links, alternar, error }
+}
+
+// Tarjeta de una nota (en el monitoreo o en Guardadas)
+function NotaCard({ n, grupo, guardada, onGuardar, onCrear, extra }) {
+  return (
+    <article className="mon-row">
+      {n.imagen ? <img className="nrow-cover" src={n.imagen} alt="" loading="lazy" referrerPolicy="no-referrer" />
+        : <span className="nrow-cover nrow-cover--empty"><Icon name="doc" size={20} /></span>}
+      <div className="nrow-main">
+        <p className="mon-meta">
+          <strong>{n.medio}</strong> · {fmt(n.fecha)}
+          {grupo?.medios.length > 1 && <span className="mon-cob">{grupo.medios.length} medios</span>}
+          {extra}
+        </p>
+        <h3 className="nrow-title"><a href={n.link} target="_blank" rel="noopener noreferrer">{n.titulo}</a></h3>
+        {n.resumen && <p className="mon-resumen">{n.resumen}</p>}
+        {n.zonas?.length > 0 && (
+          <p className="mon-zonas">{n.zonas.map(z => <span key={z}>{z}</span>)}</p>
+        )}
+        {grupo?.notas.length > 1 && (
+          <details className="mon-mas">
+            <summary>También en: {grupo.medios.filter(m => m !== n.medio).join(', ')}</summary>
+            <ul>
+              {grupo.notas.slice(1).map(x => (
+                <li key={x.link}><a href={x.link} target="_blank" rel="noopener noreferrer">{x.medio}: {x.titulo}</a></li>
+              ))}
+            </ul>
+          </details>
+        )}
+        <div className="nrow-actions">
+          <Btn as="a" variant="ghost" size="sm" icon="ext" href={n.link} target="_blank" rel="noopener noreferrer">Leer nota</Btn>
+          <Btn variant={guardada ? 'primary' : 'ghost'} size="sm" icon={guardada ? 'check' : 'bookmark'} onClick={() => onGuardar(n)}>
+            {guardada ? 'Guardada' : 'Guardar'}
+          </Btn>
+          {onCrear && <Btn variant="ghost" size="sm" icon="edit" onClick={() => onCrear(n)}>Crear nuestra nota</Btn>}
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export default function MonitoreoModule({ puedeCrear = true }) {
   const navigate = useNavigate()
+  const guardadas = useGuardadas()
+  const [vista, setVista] = useState('medios')
   const [datos, setDatos] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
@@ -149,6 +216,26 @@ export default function MonitoreoModule({ puedeCrear = true }) {
         </div>
       </header>
 
+      <div className="mon-vistas">
+        <Tabs id="monvista" items={[{ id: 'medios', label: 'Notas de los medios' }, { id: 'guardadas', label: `Mis guardadas (${guardadas.lista.length})` }]} value={vista} onChange={setVista} />
+      </div>
+      {guardadas.error && <p className="adm-error">{guardadas.error}</p>}
+
+      {vista === 'guardadas' ? (
+        <section className="adm-panel">
+          {guardadas.lista.length === 0 ? (
+            <p className="adm-muted">Aún no guardas notas. En «Notas de los medios», usa el botón «Guardar» en las que quieras revisar después.</p>
+          ) : (
+            <div className="nlist">
+              {guardadas.lista.map(n => (
+                <NotaCard key={n.id} n={n} guardada onGuardar={guardadas.alternar}
+                  onCrear={puedeCrear ? x => crearNoticia(x, x.zonas?.[0]) : null}
+                  extra={<span className="mon-guardada-el">· guardada el {fmt(n.created_at)}</span>} />
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (<>
       <section className="adm-panel mon-filtros">
         <div className="adm-grid">
           <label className="field">
@@ -194,35 +281,8 @@ export default function MonitoreoModule({ puedeCrear = true }) {
               const n = g.notas[0]
               const zona = municipio?.nombre || n.zonas[0]
               return (
-                <article key={g.id} className="mon-row">
-                  {n.imagen ? <img className="nrow-cover" src={n.imagen} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                    : <span className="nrow-cover nrow-cover--empty"><Icon name="doc" size={20} /></span>}
-                  <div className="nrow-main">
-                    <p className="mon-meta">
-                      <strong>{n.medio}</strong> · {fmt(n.fecha)}
-                      {g.medios.length > 1 && <span className="mon-cob">{g.medios.length} medios</span>}
-                    </p>
-                    <h3 className="nrow-title"><a href={n.link} target="_blank" rel="noopener noreferrer">{n.titulo}</a></h3>
-                    {n.resumen && <p className="mon-resumen">{n.resumen}</p>}
-                    {n.zonas.length > 0 && (
-                      <p className="mon-zonas">{n.zonas.map(z => <span key={z}>{z}</span>)}</p>
-                    )}
-                    {g.notas.length > 1 && (
-                      <details className="mon-mas">
-                        <summary>También en: {g.medios.filter(m => m !== n.medio).join(', ')}</summary>
-                        <ul>
-                          {g.notas.slice(1).map(x => (
-                            <li key={x.link}><a href={x.link} target="_blank" rel="noopener noreferrer">{x.medio}: {x.titulo}</a></li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
-                    <div className="nrow-actions">
-                      <Btn as="a" variant="ghost" size="sm" icon="ext" href={n.link} target="_blank" rel="noopener noreferrer">Leer nota</Btn>
-                      {puedeCrear && <Btn variant="ghost" size="sm" icon="edit" onClick={() => crearNoticia(n, zona)}>Crear nuestra nota</Btn>}
-                    </div>
-                  </div>
-                </article>
+                <NotaCard key={g.id} n={n} grupo={g} guardada={guardadas.links.has(n.link)} onGuardar={guardadas.alternar}
+                  onCrear={puedeCrear ? x => crearNoticia(x, zona) : null} />
               )
             })}
           </div>
@@ -234,6 +294,7 @@ export default function MonitoreoModule({ puedeCrear = true }) {
           </p>
         )}
       </section>
+      </>)}
     </div>
   )
 }

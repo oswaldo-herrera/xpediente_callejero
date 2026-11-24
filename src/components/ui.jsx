@@ -38,6 +38,7 @@ const ICONS = {
   info: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v6M12 7.5h.01',
   mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z',
+  bookmark: 'M6 3h12v18l-6-4-6 4z',
 }
 
 export function Icon({ name, size = 18, className = '', stroke = 1.8 }) {
