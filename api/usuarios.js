@@ -6,10 +6,14 @@
 // POST /api/usuarios { accion: 'crear', nombre, email, password, rol }
 // POST /api/usuarios { accion: 'password', user_id, password }
 // POST /api/usuarios { accion: 'rol', user_id, rol }    rol: admin | periodista | ninguno
+// POST /api/usuarios { accion: 'modulos', user_id, modulos: ['monitoreo', …] }
 import { createClient } from '@supabase/supabase-js'
 
 const ROLES = ['admin', 'periodista', 'ninguno']
 const MIN_PASSWORD = 8
+// Igual que src/admin/permisos.js
+const MODULOS = ['monitoreo', 'comentarios', 'noticias', 'videos', 'expedientes', 'calendario']
+const limpiarModulos = m => Array.isArray(m) ? [...new Set(m.filter(x => MODULOS.includes(x)))] : null
 
 const responder = (res, status, data) => {
   res.statusCode = status
@@ -26,7 +30,7 @@ const leerJson = async req => {
 }
 
 // Deja a la persona con un solo rol: admin (tabla admins), periodista (tabla equipo) o ninguno
-const asignarRol = async (db, userId, rol, nombre) => {
+const asignarRol = async (db, userId, rol, nombre, modulos) => {
   if (rol === 'admin') {
     await db.from('equipo').delete().eq('user_id', userId)
     const { error } = await db.from('admins').upsert({ user_id: userId, ...(nombre ? { nombre } : {}) })
@@ -37,7 +41,7 @@ const asignarRol = async (db, userId, rol, nombre) => {
     const { error } = await db.from('equipo').delete().eq('user_id', userId)
     return error
   }
-  const { error } = await db.from('equipo').upsert({ user_id: userId, rol, ...(nombre ? { nombre } : {}) })
+  const { error } = await db.from('equipo').upsert({ user_id: userId, rol, ...(nombre ? { nombre } : {}), ...(modulos ? { modulos } : {}) })
   return error
 }
 
@@ -65,11 +69,11 @@ export default async function handler(req, res) {
     const [{ data: lista, error }, { data: admins }, { data: equipo }] = await Promise.all([
       db.auth.admin.listUsers({ perPage: 1000 }),
       db.from('admins').select('user_id, nombre'),
-      db.from('equipo').select('user_id, nombre, rol'),
+      db.from('equipo').select('*'),
     ])
     if (error) return responder(res, 500, { mensaje: error.message })
     const porId = new Map([
-      ...(equipo || []).map(e => [e.user_id, { rol: e.rol, nombre: e.nombre }]),
+      ...(equipo || []).map(e => [e.user_id, { rol: e.rol, nombre: e.nombre, modulos: e.modulos }]),
       ...(admins || []).map(a => [a.user_id, { rol: 'admin', nombre: a.nombre }]),
     ])
     const usuarios = lista.users.map(u => ({
@@ -77,6 +81,7 @@ export default async function handler(req, res) {
       email: u.email,
       nombre: porId.get(u.id)?.nombre || '',
       rol: porId.get(u.id)?.rol || 'ninguno',
+      modulos: porId.get(u.id)?.modulos || null,
       creado: u.created_at,
       ultimoAcceso: u.last_sign_in_at,
       soyYo: u.id === yo.id,
@@ -97,7 +102,7 @@ export default async function handler(req, res) {
     // email_confirm: la cuenta queda lista sin mandar correo de confirmación
     const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { nombre } })
     if (error) return responder(res, 400, { mensaje: /already/i.test(error.message) ? 'Ya existe una cuenta con ese correo.' : error.message })
-    const errRol = await asignarRol(db, data.user.id, rol, nombre)
+    const errRol = await asignarRol(db, data.user.id, rol, nombre, limpiarModulos(body.modulos))
     if (errRol) return responder(res, 500, { mensaje: `Se creó la cuenta, pero no se pudo asignar el rol: ${errRol.message}` })
     return responder(res, 200, { ok: true })
   }
@@ -115,6 +120,15 @@ export default async function handler(req, res) {
     if (body.user_id === yo.id && body.rol !== 'admin') return responder(res, 400, { mensaje: 'No puedes quitarte a ti mismo el rol de administrador.' })
     const error = await asignarRol(db, String(body.user_id), body.rol)
     if (error) return responder(res, 500, { mensaje: error.message })
+    return responder(res, 200, { ok: true })
+  }
+
+  if (body.accion === 'modulos') {
+    const modulos = limpiarModulos(body.modulos)
+    if (!modulos) return responder(res, 400, { mensaje: 'Lista de módulos no válida.' })
+    const { data, error } = await db.from('equipo').update({ modulos }).eq('user_id', String(body.user_id)).select('user_id')
+    if (error) return responder(res, 500, { mensaje: /modulos/.test(error.message) ? 'Falta ejecutar supabase/12_permisos_modulos.sql' : error.message })
+    if (!data?.length) return responder(res, 400, { mensaje: 'Esta cuenta no es del equipo; primero dale el rol Periodista.' })
     return responder(res, 200, { ok: true })
   }
 

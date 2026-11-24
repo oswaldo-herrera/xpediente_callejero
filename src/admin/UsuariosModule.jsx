@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Btn, Icon } from '../components/ui'
+import { MODULOS_BASE, MODULOS_PERMISOS } from './permisos'
 
 const ROLES = [
   { id: 'admin', label: 'Administrador', hint: 'Ve y edita todo el panel' },
-  { id: 'periodista', label: 'Periodista', hint: 'Solo ve Monitoreo' },
+  { id: 'periodista', label: 'Periodista', hint: 'Solo los módulos que marques' },
   { id: 'ninguno', label: 'Sin acceso', hint: 'La cuenta existe pero no entra al panel' },
 ]
 const MIN_PASSWORD = 8
@@ -31,10 +32,38 @@ const api = async (metodo, body) => {
   return json
 }
 
+// Casillas de los módulos que puede usar un miembro del equipo
+function CasillasModulos({ value, onChange, disabled }) {
+  const alternar = id => onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id])
+  return (
+    <div className="usr-modulos">
+      {MODULOS_PERMISOS.map(m => (
+        <label key={m.id} className={`usr-check${value.includes(m.id) ? ' usr-check--on' : ''}`}>
+          <input type="checkbox" checked={value.includes(m.id)} disabled={disabled} onChange={() => alternar(m.id)} />
+          {m.label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
 function UsuarioRow({ u, onChanged }) {
   const [pass, setPass] = useState(null) // null = cerrado; texto = editando
   const [aviso, setAviso] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const [modulos, setModulos] = useState(u.modulos || MODULOS_BASE)
+  useEffect(() => { setModulos(u.modulos || MODULOS_BASE) }, [u.modulos])
+
+  const cambiarModulos = async nuevos => {
+    const antes = modulos
+    setModulos(nuevos)
+    setBusy(true)
+    setAviso('')
+    try { await api('POST', { accion: 'modulos', user_id: u.id, modulos: nuevos }); setAviso('Permisos guardados. La persona los verá al recargar el panel.') }
+    catch (e) { setModulos(antes); setAviso(e.message) }
+    setBusy(false)
+  }
 
   const cambiarRol = async rol => {
     setBusy(true)
@@ -67,6 +96,12 @@ function UsuarioRow({ u, onChanged }) {
           {ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
       </label>
+      {u.rol === 'periodista' && (
+        <div className="usr-pass">
+          <p className="usr-label">Puede ver y usar</p>
+          <CasillasModulos value={modulos} onChange={cambiarModulos} disabled={busy} />
+        </div>
+      )}
       <div className="usr-pass">
         {pass === null ? (
           <Btn variant="ghost" size="sm" icon="shield" onClick={() => { setAviso(''); setPass(generar()) }}>Cambiar contraseña</Btn>
@@ -88,7 +123,7 @@ export default function UsuariosModule() {
   const [usuarios, setUsuarios] = useState(null)
   const [error, setError] = useState('')
   const [faltaLlave, setFaltaLlave] = useState(false)
-  const [form, setForm] = useState({ nombre: '', email: '', password: generar(), rol: 'periodista' })
+  const [form, setForm] = useState({ nombre: '', email: '', password: generar(), rol: 'periodista', modulos: MODULOS_BASE })
   const [creando, setCreando] = useState(false)
   const [aviso, setAviso] = useState('')
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
@@ -114,7 +149,7 @@ export default function UsuariosModule() {
     try {
       await api('POST', { accion: 'crear', ...form })
       setAviso(`Cuenta creada: ${form.email} · contraseña: ${form.password}. Cópiala y compártela por un medio seguro; no se volverá a mostrar.`)
-      setForm({ nombre: '', email: '', password: generar(), rol: 'periodista' })
+      setForm({ nombre: '', email: '', password: generar(), rol: 'periodista', modulos: MODULOS_BASE })
       load()
     } catch (err) { setAviso(err.message) }
     setCreando(false)
@@ -165,6 +200,12 @@ export default function UsuariosModule() {
                   {ROLES.filter(r => r.id !== 'ninguno').map(r => <option key={r.id} value={r.id}>{r.label} · {r.hint}</option>)}
                 </select>
               </label>
+              {form.rol === 'periodista' && (
+                <div className="field field--full">
+                  <span>Puede ver y usar</span>
+                  <CasillasModulos value={form.modulos} onChange={modulos => setForm(f => ({ ...f, modulos }))} />
+                </div>
+              )}
               <div className="cal-actions field--full">
                 <Btn type="submit" variant="primary" icon="check" disabled={creando}>{creando ? 'Creando…' : 'Crear usuario'}</Btn>
               </div>

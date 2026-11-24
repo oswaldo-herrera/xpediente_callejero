@@ -11,6 +11,8 @@ import NoticiasModule from './NoticiasModule'
 import ExpedientesModule from './ExpedientesModule'
 import MonitoreoModule from './MonitoreoModule'
 import UsuariosModule from './UsuariosModule'
+import ComentariosModule from './ComentariosModule'
+import { MODULOS_BASE } from './permisos'
 
 // ─── Sesión ──────────────────────────────────────────────────────────────────
 
@@ -26,22 +28,25 @@ function useSession() {
 
 // Rol de la cuenta: 'admin' (tabla admins), 'periodista' (tabla equipo),
 // 'none' (sin acceso), 'error' o 'loading'
+// y los módulos que tiene marcados (los admins ven todos)
 function useRol(session) {
-  const [rol, setRol] = useState('loading')
+  const [estado, setEstado] = useState({ rol: 'loading', modulos: [] })
   useEffect(() => {
     if (!session) return
-    setRol('loading')
+    setEstado({ rol: 'loading', modulos: [] })
     const id = session.user.id
     supabase.from('admins').select('user_id').eq('user_id', id).maybeSingle()
       .then(async ({ data, error }) => {
-        if (error) return setRol('error')
-        if (data) return setRol('admin')
-        // Sin 09_roles.sql la tabla equipo no existe: se trata como sin acceso
-        const { data: miembro } = await supabase.from('equipo').select('rol').eq('user_id', id).maybeSingle()
-        setRol(miembro?.rol || 'none')
+        if (error) return setEstado({ rol: 'error', modulos: [] })
+        if (data) return setEstado({ rol: 'admin', modulos: [] })
+        // Sin 09_roles.sql la tabla equipo no existe: se trata como sin acceso.
+        // Sin 12_permisos_modulos.sql no hay columna modulos: se usan los de base.
+        let { data: miembro, error: e2 } = await supabase.from('equipo').select('rol, modulos').eq('user_id', id).maybeSingle()
+        if (e2) ({ data: miembro } = await supabase.from('equipo').select('rol').eq('user_id', id).maybeSingle())
+        setEstado(miembro ? { rol: miembro.rol, modulos: miembro.modulos || MODULOS_BASE } : { rol: 'none', modulos: [] })
       })
   }, [session])
-  return rol
+  return estado
 }
 
 // ─── Pantallas ───────────────────────────────────────────────────────────────
@@ -136,20 +141,18 @@ const MODULES = [
   { to: 'noticias', label: 'Noticias', icon: 'doc', element: <NoticiasModule /> },
   { to: 'expedientes', label: 'Expedientes', icon: 'folder', element: <ExpedientesModule /> },
   { to: 'monitoreo', label: 'Monitoreo', icon: 'search' },
+  { to: 'comentarios', label: 'Comentarios', icon: 'quote', element: <ComentariosModule /> },
   { to: 'calendario', label: 'Calendario', icon: 'clock', element: <CalendarModule /> },
   { label: 'Denuncias', icon: 'megaphone', soon: true },
   { to: 'usuarios', label: 'Usuarios', icon: 'users', element: <UsuariosModule /> },
 ]
 
-// Qué módulos ve cada rol (el admin ve todos)
-const VISTAS = {
-  periodista: ['monitoreo'],
-}
-const puedeVer = (rol, m) => rol === 'admin' || (!m.soon && VISTAS[rol]?.includes(m.to))
+// El admin ve todos; el equipo, solo los módulos marcados en Usuarios
+const puedeVer = (rol, permisos, m) => rol === 'admin' || (!m.soon && permisos.includes(m.to))
 const TITULO_ROL = { admin: 'Admin', periodista: 'Periodista' }
 
-function Layout({ session, rol }) {
-  const modulos = MODULES.filter(m => puedeVer(rol, m))
+function Layout({ session, rol, permisos }) {
+  const modulos = MODULES.filter(m => puedeVer(rol, permisos, m))
   const inicio = modulos.find(m => !m.soon)?.to || 'monitoreo'
   return (
     <div className="adm">
@@ -177,7 +180,7 @@ function Layout({ session, rol }) {
         <Routes>
           <Route index element={<Navigate to={inicio} replace />} />
           {modulos.filter(m => !m.soon).map(m => (
-            <Route key={m.to} path={m.to} element={m.to === 'monitoreo' ? <MonitoreoModule puedeCrear={rol === 'admin'} /> : m.element} />
+            <Route key={m.to} path={m.to} element={m.to === 'monitoreo' ? <MonitoreoModule puedeCrear={rol === 'admin' || permisos.includes('noticias')} /> : m.element} />
           ))}
           <Route path="*" element={<Navigate to={inicio} replace />} />
         </Routes>
@@ -190,12 +193,12 @@ function Layout({ session, rol }) {
 
 function Gate() {
   const session = useSession()
-  const rol = useRol(session)
+  const { rol, modulos } = useRol(session)
   if (session === undefined) return null
   if (!session) return <Login />
   if (rol === 'loading') return null
   if (rol === 'none' || rol === 'error') return <NoAccess email={session.user.email} state={rol} />
-  return <Layout session={session} rol={rol} />
+  return <Layout session={session} rol={rol} permisos={modulos} />
 }
 
 export default function AdminApp() {
